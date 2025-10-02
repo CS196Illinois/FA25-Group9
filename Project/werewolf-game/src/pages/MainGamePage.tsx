@@ -1,6 +1,6 @@
 // src/pages/MainGamePage.tsx
 // ASSIGNED TO: Tjudge (tjudge2), Jayden (jsbali2), Subash (subashs2) - WORK TOGETHER
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { GameState, Player } from '../types';
 
 interface MainGamePageProps {
@@ -11,12 +11,53 @@ const MainGamePage: React.FC<MainGamePageProps> = ({ gameState }) => {
   const [message, setMessage] = useState('');
   const [messages, setMessages] = useState<string[]>([]);
   const [notes, setNotes] = useState('');
+  const [rightWidth, setRightWidth] = useState<number>(300);
+  const resizerRef = useRef<HTMLDivElement | null>(null);
+  const isResizingRef = useRef(false);
+  
+  // Load notes from localStorage on mount
+  useEffect(() => {
+    const saved = localStorage.getItem('werewolf_notes');
+    if (saved) setNotes(saved);
+  }, []);
+
+  // Save notes to localStorage when they change
+  useEffect(() => {
+    localStorage.setItem('werewolf_notes', notes);
+  }, [notes]);
+
+  // Resizer mouse handlers (global listeners)
+  useEffect(() => {
+    const onMove = (e: MouseEvent) => {
+      if (!isResizingRef.current) return;
+      const container = document.querySelector('.game-content') as HTMLElement | null;
+      if (!container) return;
+      const rect = container.getBoundingClientRect();
+      const newWidth = rect.right - e.clientX;
+      const min = 200;
+      const max = Math.min(600, rect.width - 200);
+      if (newWidth >= min && newWidth <= max) setRightWidth(newWidth);
+    };
+
+    const onUp = () => { isResizingRef.current = false; };
+
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+    return () => {
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+    };
+  }, []);
   const [selectedPlayer, setSelectedPlayer] = useState<string | null>(null);
 
   return (
     <div className="main-game-page">
       {/* TIMER SECTION - All team members work on this together */}
       <div className="game-header">
+        <div className="page-title">
+  <h1>Werewolf Kill Game</h1>
+  <p className="subtitle">Discuss, deduce, survive.</p>
+</div>
         <div className="timer">
           <h3>Time Remaining: {gameState.timer}s</h3>
           <div className="phase">Phase: {gameState.gamePhase}</div>
@@ -89,7 +130,7 @@ const MainGamePage: React.FC<MainGamePageProps> = ({ gameState }) => {
         </div>
 
         {/* NOTES SECTION - All team members work on this together */}
-        <div className="right-panel">
+        <div className="right-panel" style={{ width: rightWidth }}>
           <div className="notes-pad">
             <h4>Private Notes</h4>
             <textarea
@@ -98,9 +139,19 @@ const MainGamePage: React.FC<MainGamePageProps> = ({ gameState }) => {
               placeholder="Write your private notes here..."
               rows={15}
             />
-            {/* TODO: Save notes locally */}
-            {/* TODO: Add formatting options */}
+            <div className="notes-actions">
+              <button onClick={() => {
+                setNotes('');
+                localStorage.removeItem('werewolf_notes');
+              }}>Clear</button>
+            </div>
           </div>
+          <div
+            ref={resizerRef}
+            className="resizer"
+            onMouseDown={() => { isResizingRef.current = true; }}
+            onDoubleClick={() => setRightWidth(300)}
+          />
         </div>
       </div>
 
