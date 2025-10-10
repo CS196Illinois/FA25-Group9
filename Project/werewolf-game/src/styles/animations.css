@@ -1,0 +1,48 @@
+/* Container sets perspective for 3D effect */
+.animated-card-container {
+  perspective: 1000px;
+  width: 300px;
+  height: 200px;
+  cursor: pointer;
+}
+
+/* Card base styling */
+.animated-card {
+  width: 100%;
+  height: 100%;
+  position: relative;
+  transition: transform 0.6s ease;
+  transform-style: preserve-3d;
+}
+
+/* Add rotation when flipped */
+.animated-card.flipped {
+  transform: rotateY(180deg);
+}
+
+/* Shared face styling */
+.card-face {
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden; /* For Safari */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.2rem;
+  border: 1px solid #ccc;
+  border-radius: 10px;
+  background: white;
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+}
+
+/* Front face is visible by default */
+.card-front {
+  z-index: 2;
+}
+
+/* Back face is rotated */
+.card-back {
+  transform: rotateY(180deg);
+}
