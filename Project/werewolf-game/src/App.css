@@ -73,6 +73,7 @@ button:disabled {
   align-items: stretch;
 }
 
+/*
 .notes-pad {
   flex: 1;
   display: flex;
@@ -93,7 +94,7 @@ button:disabled {
   margin-top: 8px;
   text-align: right;
 }
-
+*/
 .resizer {
   width: 8px;
   cursor: col-resize;
@@ -101,4 +102,67 @@ button:disabled {
   left: -8px;
   top: 0;
   bottom: 0;
+}
+
+/* My Additions */
+.notes-main {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.notes-editor {
+  flex: 1 1 auto;
+  padding: 8px;
+  border-radius: 6px;
+  border: 1px solid #ddd;
+  background: #fffbe6;
+  color: #111;
+  font-size: 14px;
+  resize: vertical;
+  min-height: 140px;
+}
+
+.notes-preview {
+  width: 220px;
+  background: #0f0f0f;
+  border: 1px solid #222;
+  border-radius: 6px;
+  padding: 10px;
+  color: #ddd;
+  min-height: 140px;
+  overflow-y: auto;
+}
+
+.notes-preview h5 {
+  margin: 0 0 8px 0;
+  font-size: 13px;
+  color: #fff;
+}
+
+.notes-empty {
+  color: #888;
+  font-size: 13px;
+}
+
+.notes-preview-list {
+  margin: 0;
+  padding-left: 18px;
+  line-height: 1.5;
+}
+
+.notes-preview-list li {
+  margin-bottom: 6px;
+}
+
+.notes-meta {
+  text-align: right;
+  color: #bbb;
+  font-size: 12px;
+  margin-top: 8px;
+}
+
+.notes-actions {
+  margin-top: 8px;
+  text-align: right;
 }

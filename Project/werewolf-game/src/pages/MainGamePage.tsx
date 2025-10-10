@@ -1,7 +1,7 @@
 // src/pages/MainGamePage.tsx
 // ASSIGNED TO: Tjudge (tjudge2), Jayden (jsbali2), Subash (subashs2) - WORK TOGETHER
 import React, { useEffect, useRef, useState } from 'react';
-import { GameState, Player } from '../types';
+import { GameState } from '../types';
 
 interface MainGamePageProps {
   gameState: GameState;
@@ -9,7 +9,11 @@ interface MainGamePageProps {
 
 const MainGamePage: React.FC<MainGamePageProps> = ({ gameState }) => {
   const [message, setMessage] = useState('');
-  const [messages, setMessages] = useState<string[]>([]);
+  type MessageType = 'public' | 'whisper';
+  interface ChatMessage { id: number; content: string; timestamp: Date; type: MessageType; to?: string | null; toName?: string | null }
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [messageType, setMessageType] = useState<MessageType>('public');
+  const [whisperTarget, setWhisperTarget] = useState<string | null>(null);
   const [notes, setNotes] = useState('');
   const [rightWidth, setRightWidth] = useState<number>(300);
   const resizerRef = useRef<HTMLDivElement | null>(null);
@@ -49,6 +53,31 @@ const MainGamePage: React.FC<MainGamePageProps> = ({ gameState }) => {
     };
   }, []);
   const [selectedPlayer, setSelectedPlayer] = useState<string | null>(null);
+
+  // format a timestamp like "8:05 AM" in 12-hour time (hour no leading zero, minutes padded)
+  const getTimestamp = (d = new Date()) => {
+    let h = d.getHours();
+    const m = d.getMinutes();
+    const ampm = h >= 12 ? 'PM' : 'AM';
+    h = h % 12;
+    if (h === 0) h = 12; // midnight or noon -> 12
+    const minuteStr = m < 10 ? `0${m}` : `${m}`;
+    return `${h}:${minuteStr} ${ampm}`;
+  };
+
+  // styling helper for different message types (returns className string or style token)
+  const getMessageStyles = (msg: ChatMessage) => {
+    if (msg.type === 'whisper') return 'whisper';
+    return 'public';
+  };
+
+  // simple icon helper -- returns JSX for an icon per message type
+  const getMessageIcon = (type: MessageType) => {
+    if (type === 'whisper') return <span style={{ marginRight: 6 }}>🔒</span>;
+    return <span style={{ marginRight: 6 }}>💬</span>;
+  };
+
+  // (system messages removed) - keep push logic in your game controller if needed
 
   return (
     <div className="main-game-page">
@@ -97,23 +126,67 @@ const MainGamePage: React.FC<MainGamePageProps> = ({ gameState }) => {
         <div className="center-panel">
           <div className="chat-box">
             <div className="chat-messages">
-              {messages.map((msg, index) => (
-                <div key={index} className="message">{msg}</div>
-              ))}
-              {/* TODO: Handle different message types (public, whisper, system) */}
-              {/* TODO: Add message timestamps */}
+              {messages.map((msg, index) => {
+                if (msg.type === 'whisper') {
+                  return (
+                    <div key={index} className="message whisper" style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '1.2rem', color: '#076affff' }}>
+                      <span className="message-text" style={{ flex: '0 1 auto' }}>{msg.content}</span>
+                        <span className="message-meta" style={{ color: '#666', fontSize: '0.85em', whiteSpace: 'nowrap' }}>(whisper to {msg.toName ?? 'unknown'}) {getTimestamp(msg.timestamp)}</span>
+                    </div>
+                  );
+                }
+
+                /* system messages removed */
+
+                // public
+                return (
+                  <div key={index} className="message public" style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '1.2rem' }}>
+                    <span className="message-text" style={{ flex: '0 1 auto' }}>{msg.content}</span>
+                      <span className="message-time" style={{ color: '#666', fontSize: '0.9em', whiteSpace: 'nowrap' }}>{getTimestamp(msg.timestamp)}</span>
+                  </div>
+                );
+              })}
             </div>
             
             <div className="chat-input">
+              <div className="message-type-selector" style={{ marginBottom: '0.4rem', display: 'flex', gap: '0.8rem', alignItems: 'center' }}>
+                <label style={{ fontSize: '0.9em' }}>
+                  <input type="radio" name="msgtype" checked={messageType === 'public'} onChange={() => setMessageType('public')} /> Public
+                </label>
+                <label style={{ fontSize: '0.9em' }}>
+                  <input type="radio" name="msgtype" checked={messageType === 'whisper'} onChange={() => setMessageType('whisper')} /> Whisper
+                </label>
+                {/* System option removed */}
+                {messageType === 'whisper' && (
+                  <select value={whisperTarget ?? ''} onChange={(e) => setWhisperTarget(e.target.value || null)} style={{ marginLeft: '0.6rem' }}>
+                    <option value="">Select player</option>
+                    {gameState.players.map(p => (
+                      <option key={p.id} value={p.id}>{p.name}</option>
+                    ))}
+                  </select>
+                )}
+              </div>
+
               <input 
                 value={message} 
                 onChange={(e) => setMessage(e.target.value)}
-                placeholder="Type your message..."
                 disabled={gameState.gamePhase === 'night'}
               />
               <button onClick={() => {
                 if (message.trim()) {
-                  setMessages([...messages, message]);
+                  const chatMsg: ChatMessage = {
+                    id: Date.now(),
+                    content: message.trim(),
+                    timestamp: new Date(),
+                    type: messageType,
+                    to: undefined,
+                    toName: undefined
+                  };
+                  if (messageType === 'whisper') {
+                    chatMsg.to = whisperTarget ?? null;
+                    chatMsg.toName = gameState.players.find(p => p.id === whisperTarget)?.name ?? null;
+                  }
+                  setMessages(prev => [...prev, chatMsg]);
                   setMessage('');
                 }
               }}>Send</button>
@@ -129,20 +202,54 @@ const MainGamePage: React.FC<MainGamePageProps> = ({ gameState }) => {
           </div>
         </div>
 
-        {/* NOTES SECTION - All team members work on this together */}
+              {/* NOTES SECTION - All team members work on this together */}
         <div className="right-panel" style={{ width: rightWidth }}>
           <div className="notes-pad">
             <h4>Private Notes</h4>
-            <textarea
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-              placeholder="Write your private notes here..."
-              rows={15}
-            />
+
+            <div className="notes-main">
+              <textarea
+                className="notes-editor"
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
+                placeholder={"Write your private notes here...\nUse one line per bullet."}
+                rows={15}
+              />
+
+              {/* Split notes into lines for preview */}
+              {/*
+                noteLines: string[] - each line of notes, trimmed, non-empty
+              */}
+              {(() => {
+                const noteLines = notes
+                  .split('\n')
+                  .map(line => line.trim())
+                  .filter(line => line.length > 0);
+                return (
+                  <div className="notes-preview">
+                    <h5>Preview</h5>
+                    {noteLines.length === 0 ? (
+                      <div className="notes-empty"></div>
+                    ) : (
+                      <ul className="notes-preview-list">
+                        {noteLines.map((line, i) => (
+                          <li key={i}>{line}</li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+                );
+              })()}
+            </div>
+
+            <div className="notes-meta">{notes.length} chars</div>
+
             <div className="notes-actions">
               <button onClick={() => {
-                setNotes('');
-                localStorage.removeItem('werewolf_notes');
+                if (confirm('Clear all notes?')) {
+                  setNotes('');
+                  localStorage.removeItem('werewolf_notes');
+                }
               }}>Clear</button>
             </div>
           </div>
