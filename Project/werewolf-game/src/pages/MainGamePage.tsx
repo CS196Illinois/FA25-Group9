@@ -126,26 +126,27 @@ const MainGamePage: React.FC<MainGamePageProps> = ({ gameState }) => {
         <div className="center-panel">
           <div className="chat-box">
             <div className="chat-messages">
-              {messages.map((msg, index) => {
-                if (msg.type === 'whisper') {
-                  return (
-                    <div key={index} className="message whisper" style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '1.2rem', color: '#076affff' }}>
-                      <span className="message-text" style={{ flex: '0 1 auto' }}>{msg.content}</span>
+                {messages.map((msg, index) => {
+                  const cls = `message ${getMessageStyles(msg)}`;
+                  if (msg.type === 'whisper') {
+                    return (
+                      <div key={index} className={cls} style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '1.2rem', color: '#076affff' }}>
+                        {getMessageIcon(msg.type)}
+                        <span className="message-text" style={{ flex: '0 1 auto' }}>{msg.content}</span>
                         <span className="message-meta" style={{ color: '#666', fontSize: '0.85em', whiteSpace: 'nowrap' }}>(whisper to {msg.toName ?? 'unknown'}) {getTimestamp(msg.timestamp)}</span>
+                      </div>
+                    );
+                  }
+
+                  // public
+                  return (
+                    <div key={index} className={cls} style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '1.2rem' }}>
+                      {getMessageIcon(msg.type)}
+                      <span className="message-text" style={{ flex: '0 1 auto' }}>{msg.content}</span>
+                      <span className="message-time" style={{ color: '#666', fontSize: '0.9em', whiteSpace: 'nowrap' }}>{getTimestamp(msg.timestamp)}</span>
                     </div>
                   );
-                }
-
-                /* system messages removed */
-
-                // public
-                return (
-                  <div key={index} className="message public" style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '1.2rem' }}>
-                    <span className="message-text" style={{ flex: '0 1 auto' }}>{msg.content}</span>
-                      <span className="message-time" style={{ color: '#666', fontSize: '0.9em', whiteSpace: 'nowrap' }}>{getTimestamp(msg.timestamp)}</span>
-                  </div>
-                );
-              })}
+                })}
             </div>
             
             <div className="chat-input">
@@ -246,10 +247,6 @@ const MainGamePage: React.FC<MainGamePageProps> = ({ gameState }) => {
 
             <div className="notes-actions">
               <button onClick={() => {
-                if (confirm('Clear all notes?')) {
-                  setNotes('');
-                  localStorage.removeItem('werewolf_notes');
-                }
               }}>Clear</button>
             </div>
           </div>
