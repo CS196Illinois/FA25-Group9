@@ -81,15 +81,50 @@ const MainGamePage: React.FC<MainGamePageProps> = ({ gameState }) => {
                 onClick={() => setSelectedPlayer(player.id)}
               >
                 <span>{player.name}</span>
-                {/* TODO: Add voting buttons during voting phase */}
-                {/* TODO: Show status indicators */}
               </div>
             ))}
           </div>
-          
-          {/* TODO: Add voting section */}
-          <div className="voting-section">
-            <button disabled={!selectedPlayer}>Vote to Eliminate</button>
+
+          {/* Voting grid: red circular buttons representing players. Click to select. */}
+          <div className="vote-area">
+            {/* Circular table: position buttons around a circle */}
+            <div className="vote-table" aria-hidden={false}>
+              {gameState.players.map((player, idx) => {
+                const n = gameState.players.length || 1;
+                // start at top (-90deg) and go clockwise
+                const angle = (idx / n) * 2 * Math.PI - Math.PI / 2;
+                const radius = 42; // percent radius from center
+                const left = 50 + Math.cos(angle) * radius;
+                const top = 50 + Math.sin(angle) * radius;
+                return (
+                  <button
+                    key={player.id}
+                    className={`vote-button ${player.isAlive ? '' : 'dead'} ${selectedPlayer === player.id ? 'selected' : ''}`}
+                    onClick={() => player.isAlive && setSelectedPlayer(player.id)}
+                    aria-pressed={selectedPlayer === player.id}
+                    title={player.name}
+                    style={{ position: 'absolute', left: `${left}%`, top: `${top}%`, transform: 'translate(-50%, -50%)' }}
+                  >
+                    {player.name ? player.name.charAt(0).toUpperCase() : player.id}
+                  </button>
+                );
+              })}
+              {/* optional center marker for the table */}
+              <div className="table-center" />
+            </div>
+
+            <div className="voting-section">
+              <button
+                className="vote-submit"
+                disabled={!selectedPlayer}
+                onClick={() => {
+                  console.log('Voted to eliminate', selectedPlayer);
+                  alert(`Voted to eliminate ${selectedPlayer}`);
+                }}
+              >
+                Vote to Eliminate
+              </button>
+            </div>
           </div>
         </div>
 
@@ -119,13 +154,7 @@ const MainGamePage: React.FC<MainGamePageProps> = ({ gameState }) => {
               }}>Send</button>
             </div>
             
-            {/* TODO: Quick comment buttons */}
-            <div className="quick-comments">
-              <button>👍</button>
-              <button>👎</button>
-              <button>🤔</button>
-              <button>😱</button>
-            </div>
+            
           </div>
         </div>
 

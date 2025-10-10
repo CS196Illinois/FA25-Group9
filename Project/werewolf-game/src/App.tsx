@@ -9,9 +9,18 @@ import './App.css';
 function App() {
   const [currentPage, setCurrentPage] = useState<'title' | 'host' | 'lobby' | 'game'>('title');
   const [gameState, setGameState] = useState<GameState>({
-    players: [],
-    gamePhase: 'waiting',
-    timer: 0
+    players: [
+      { id: 'p1', name: 'Alice', isAlive: true },
+      { id: 'p2', name: 'Ben', isAlive: true },
+      { id: 'p3', name: 'Cara', isAlive: true },
+      { id: 'p4', name: 'Dan', isAlive: true },
+      { id: 'p5', name: 'Eve', isAlive: true },
+      { id: 'p6', name: 'Fay', isAlive: true },
+      { id: 'p7', name: 'Gabe', isAlive: true },
+      { id: 'p8', name: 'Hana', isAlive: false }
+    ],
+    gamePhase: 'voting',
+    timer: 180
   });
 
   const renderCurrentPage = () => {
