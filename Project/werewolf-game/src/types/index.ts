@@ -1,13 +1,25 @@
-// src/types/index.ts
 export interface Player {
   id: string;
   name: string;
-  role?: string;
   isAlive: boolean;
+  role?: string;
+  isReady?: boolean;
 }
 
 export interface GameState {
   players: Player[];
-  gamePhase: 'waiting' | 'day' | 'night' | 'voting' | 'ended';
   timer: number;
+  gamePhase: 'night' | 'day' | 'discussion' | 'voting' | 'results';
+  round: number;
+}
+
+export type MessageType = 'public' | 'whisper';
+
+export interface ChatMessage {
+  id: number;
+  content: string;
+  timestamp: Date;
+  type: MessageType;
+  to?: string | null;
+  toName?: string | null;
 }
