@@ -1,96 +1,260 @@
 import React, { useState } from "react";
-
-type Player = {
-  id: number;       
-  name: string;
-  isReady: boolean;
-};
-
-const MAX_PLAYERS = 12;
+import { useGameContext } from '../contexts/GameContext';
 
 const PlayerSlotPage: React.FC = () => {
-  const [players, setPlayers] = useState<(Player | null)[]>(
-    Array(MAX_PLAYERS).fill(null)
-  );
+  const [gameCodeInput, setGameCodeInput] = useState<string>('');
+  const [playerNameInput, setPlayerNameInput] = useState<string>('');
+  const [errorMessage, setErrorMessage] = useState<string>('');
+  const [isJoining, setIsJoining] = useState<boolean>(false);
 
-  const [myIndex, setMyIndex] = useState<number | null>(null);
-  const [editingIndex, setEditingIndex] = useState<number | null>(null);
-  const [inputName, setInputName] = useState<string>("");
+  const {
+    gameCode,
+    players,
+    settings,
+    currentUserId,
+    joinGame,
+    setPlayerReady,
+    leaveGame: contextLeaveGame
+  } = useGameContext();
 
-  const startJoin = (index: number) => {
-    if (players[index] !== null) return;      
-    if (myIndex !== null) return;             
-    setEditingIndex(index);
-    setInputName("");
+  const handleJoinGame = async (): Promise<void> => {
+    if (!gameCodeInput.trim()) {
+      setErrorMessage('Please enter a game code');
+      return;
+    }
+
+    if (!playerNameInput.trim()) {
+      setErrorMessage('Please enter your name');
+      return;
+    }
+
+    setErrorMessage('');
+    setIsJoining(true);
+
+    try {
+      await joinGame(gameCodeInput.toUpperCase().trim(), playerNameInput.trim());
+    } catch (error: any) {
+      setErrorMessage(error.message || 'Failed to join game');
+    } finally {
+      setIsJoining(false);
+    }
   };
 
-  const confirmJoin = () => {
-    if (editingIndex === null) return;
-    const name = inputName.trim();
-    if (!name) return;
+  const handleToggleReady = async (): Promise<void> => {
+    const currentPlayer = players.find(p => p.id === currentUserId);
+    if (!currentPlayer) return;
 
-    setPlayers(prev => {
-      const next = prev.slice();
-      next[editingIndex] = { id: editingIndex, name, isReady: false };
-      return next;
-    });
-    setMyIndex(editingIndex);
-    setEditingIndex(null);
-    setInputName("");
+    try {
+      await setPlayerReady(!currentPlayer.isReady);
+    } catch (error: any) {
+      setErrorMessage(error.message || 'Failed to update ready status');
+    }
   };
 
-  const cancelJoin = () => {
-    setEditingIndex(null);
-    setInputName("");
+  const handleLeaveGame = async (): Promise<void> => {
+    try {
+      await contextLeaveGame();
+    } catch (error: any) {
+      setErrorMessage(error.message || 'Failed to leave game');
+    }
   };
 
-  const toggleReady = () => {
-    if (myIndex === null) return;
-    setPlayers(prev =>
-      prev.map((p, i) =>
-        i === myIndex && p ? { ...p, isReady: !p.isReady } : p
-      )
+  const currentPlayer = players.find(p => p.id === currentUserId);
+
+  // If not joined a game, show join form
+  if (!gameCode) {
+    return (
+      <div style={{
+        minHeight: '100vh',
+        backgroundColor: '#000',
+        backgroundImage: 'repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(139, 0, 0, 0.1) 2px, rgba(139, 0, 0, 0.1) 4px)',
+        padding: '20px'
+      }}>
+        <style>{`
+          @import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&family=VT323&display=swap');
+          .pixel-title {
+            font-family: 'Press Start 2P', cursive;
+            image-rendering: pixelated;
+          }
+          .pixel-text {
+            font-family: 'VT323', monospace;
+            image-rendering: pixelated;
+          }
+          .pixel-border {
+            box-shadow:
+              0 0 0 2px #8B0000,
+              0 0 0 4px #000,
+              inset 0 0 0 2px #8B0000;
+          }
+          .pixel-button {
+            box-shadow:
+              4px 0 0 #000,
+              -4px 0 0 #000,
+              0 4px 0 #000,
+              0 -4px 0 #000,
+              4px 4px 0 #000,
+              -4px -4px 0 #000,
+              4px -4px 0 #000,
+              -4px 4px 0 #000;
+            transition: all 0.1s;
+          }
+          .pixel-button:hover {
+            transform: translate(2px, 2px);
+            box-shadow:
+              2px 0 0 #000,
+              -2px 0 0 #000,
+              0 2px 0 #000,
+              0 -2px 0 #000;
+          }
+        `}</style>
+
+        <div style={{ maxWidth: '600px', margin: '0 auto' }}>
+          <div style={{ textAlign: 'center', marginBottom: '30px' }}>
+            <h1 className="pixel-title" style={{
+              fontSize: '3rem',
+              color: '#DC143C',
+              textShadow: '4px 4px 0 #000, -2px -2px 0 #8B0000',
+              letterSpacing: '0.1em'
+            }}>
+              JOIN GAME
+            </h1>
+          </div>
+
+          <div className="pixel-border" style={{
+            background: 'linear-gradient(to bottom, #4a0000, #000)',
+            padding: '30px'
+          }}>
+            {/* Game Code Input */}
+            <div style={{ marginBottom: '20px' }}>
+              <label className="pixel-text" style={{
+                display: 'block',
+                fontSize: '1.2rem',
+                color: '#DC143C',
+                marginBottom: '10px'
+              }}>
+                Game Code:
+              </label>
+              <input
+                type="text"
+                value={gameCodeInput}
+                onChange={(e) => setGameCodeInput(e.target.value.toUpperCase())}
+                placeholder="Enter game code"
+                maxLength={6}
+                style={{
+                  width: '100%',
+                  padding: '12px',
+                  backgroundColor: '#000',
+                  border: '3px solid #8B0000',
+                  color: '#DC143C',
+                  fontSize: '1.5rem',
+                  textAlign: 'center',
+                  letterSpacing: '0.3em',
+                  outline: 'none'
+                }}
+                className="pixel-text"
+              />
+            </div>
+
+            {/* Player Name Input */}
+            <div style={{ marginBottom: '20px' }}>
+              <label className="pixel-text" style={{
+                display: 'block',
+                fontSize: '1.2rem',
+                color: '#DC143C',
+                marginBottom: '10px'
+              }}>
+                Your Name:
+              </label>
+              <input
+                type="text"
+                value={playerNameInput}
+                onChange={(e) => setPlayerNameInput(e.target.value)}
+                placeholder="Enter your name"
+                style={{
+                  width: '100%',
+                  padding: '12px',
+                  backgroundColor: '#000',
+                  border: '3px solid #8B0000',
+                  color: '#DC143C',
+                  fontSize: '1.2rem',
+                  outline: 'none'
+                }}
+                className="pixel-text"
+                onKeyPress={(e) => {
+                  if (e.key === 'Enter') handleJoinGame();
+                }}
+              />
+            </div>
+
+            {/* Error Message */}
+            {errorMessage && (
+              <div style={{
+                marginBottom: '20px',
+                backgroundColor: '#8B0000',
+                border: '3px solid #DC143C',
+                padding: '15px',
+                textAlign: 'center'
+              }}>
+                <p className="pixel-text" style={{
+                  color: '#FFD700',
+                  fontSize: '1rem',
+                  margin: 0
+                }}>
+                  {errorMessage}
+                </p>
+              </div>
+            )}
+
+            {/* Join Button */}
+            <button
+              onClick={handleJoinGame}
+              disabled={isJoining}
+              className="pixel-button pixel-title"
+              style={{
+                width: '100%',
+                backgroundColor: isJoining ? '#555' : '#228B22',
+                color: 'white',
+                padding: '20px',
+                fontSize: '1.2rem',
+                border: 'none',
+                cursor: isJoining ? 'not-allowed' : 'pointer',
+                opacity: isJoining ? 0.6 : 1
+              }}
+            >
+              {isJoining ? 'JOINING...' : 'JOIN GAME'}
+            </button>
+          </div>
+        </div>
+      </div>
     );
-  };
+  }
 
-  const leaveGame = () => {
-    if (myIndex === null) return;
-    setPlayers(prev => prev.map((p, i) => (i === myIndex ? null : p)));
-    setMyIndex(null);
-  };
-
-  const currentCount = players.filter(p => p !== null).length;
-
+  // Show lobby after joining
   return (
     <div style={{
       minHeight: '100vh',
       backgroundColor: '#000',
       backgroundImage: 'repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(139, 0, 0, 0.1) 2px, rgba(139, 0, 0, 0.1) 4px)',
-      padding: '20px',
-      overflowX: 'hidden'
+      padding: '20px'
     }}>
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&family=VT323&display=swap');
-        
         .pixel-title {
           font-family: 'Press Start 2P', cursive;
           image-rendering: pixelated;
         }
-        
         .pixel-text {
           font-family: 'VT323', monospace;
           image-rendering: pixelated;
         }
-        
         .pixel-border {
-          box-shadow: 
+          box-shadow:
             0 0 0 2px #8B0000,
             0 0 0 4px #000,
             inset 0 0 0 2px #8B0000;
         }
-        
         .pixel-button {
-          box-shadow: 
+          box-shadow:
             4px 0 0 #000,
             -4px 0 0 #000,
             0 4px 0 #000,
@@ -101,10 +265,9 @@ const PlayerSlotPage: React.FC = () => {
             -4px 4px 0 #000;
           transition: all 0.1s;
         }
-        
         .pixel-button:hover {
           transform: translate(2px, 2px);
-          box-shadow: 
+          box-shadow:
             2px 0 0 #000,
             -2px 0 0 #000,
             0 2px 0 #000,
@@ -112,15 +275,14 @@ const PlayerSlotPage: React.FC = () => {
         }
       `}</style>
 
-      <div style={{ maxWidth: '1400px', margin: '0 auto' }}>
+      <div style={{ maxWidth: '1000px', margin: '0 auto' }}>
         {/* Header */}
         <div style={{ textAlign: 'center', marginBottom: '30px' }}>
           <h1 className="pixel-title" style={{
             fontSize: '3rem',
             color: '#DC143C',
             textShadow: '4px 4px 0 #000, -2px -2px 0 #8B0000',
-            letterSpacing: '0.1em',
-            margin: '0 0 10px 0'
+            letterSpacing: '0.1em'
           }}>
             GAME LOBBY
           </h1>
@@ -129,153 +291,115 @@ const PlayerSlotPage: React.FC = () => {
             color: '#DC143C',
             margin: '10px 0'
           }}>
-            {currentCount}/{MAX_PLAYERS} players joined
+            {players.length}/{settings.totalPlayers} players joined
           </p>
           <p className="pixel-text" style={{
             fontSize: '1.2rem',
             color: '#DC143C',
             margin: '5px 0'
           }}>
-            Game Code: <span style={{ color: '#FFD700' }}>ABCD1234</span>
+            Game Code: <span style={{ color: '#FFD700', letterSpacing: '0.2em' }}>{gameCode}</span>
           </p>
         </div>
 
-        {/* Player Grid */}
-        <div style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
-          gap: '15px',
-          marginBottom: '30px'
+        <div className="pixel-border" style={{
+          background: 'linear-gradient(to bottom, #4a0000, #000)',
+          padding: '30px',
+          marginBottom: '20px'
         }}>
-          {players.map((player, index) => (
-            <div
-              key={index}
-              className="pixel-border"
-              style={{
-                padding: '25px',
-                background: player ? 'linear-gradient(to bottom, #4a0000, #000)' : 'linear-gradient(to bottom, #2a0000, #000)',
-                minHeight: '140px',
-                display: 'flex',
-                flexDirection: 'column',
-                justifyContent: 'center',
-                alignItems: 'center',
-                cursor: player || myIndex !== null ? 'default' : 'pointer',
-                transition: 'all 0.2s'
-              }}
-              onClick={() => {
-                if (!player && myIndex === null && editingIndex === null) {
-                  startJoin(index);
-                }
-              }}
-            >
-              {player ? (
-                <>
-                  <h3 className="pixel-text" style={{
-                    margin: '0 0 10px 0',
-                    fontSize: '1.5rem',
-                    color: '#DC143C'
-                  }}>
-                    {player.name}
-                  </h3>
-                  <p className="pixel-text" style={{ 
-                    margin: '8px 0',
-                    fontSize: '1.2rem',
-                    color: player.isReady ? '#00FF00' : '#DC143C'
-                  }}>
-                    Status: {player.isReady ? '✅ Ready' : '❌ Not Ready'}
-                  </p>
-
-                  {myIndex === index && (
-                    <button 
-                      onClick={toggleReady}
-                      className="pixel-button pixel-text"
-                      style={{
-                        marginTop: '10px',
-                        padding: '10px 20px',
-                        backgroundColor: player.isReady ? '#666' : '#228B22',
-                        color: 'white',
-                        border: 'none',
-                        cursor: 'pointer',
-                        fontSize: '1rem'
-                      }}
-                    >
-                      {player.isReady ? 'Unready' : 'Ready'}
-                    </button>
-                  )}
-                </>
-              ) : editingIndex === index ? (
-                <div style={{ width: '100%' }}>
-                  <input
-                    value={inputName}
-                    onChange={e => setInputName(e.target.value)}
-                    placeholder="Enter your name"
-                    autoFocus
-                    className="pixel-text"
-                    style={{
-                      width: '100%',
-                      padding: '10px',
-                      marginBottom: '10px',
-                      backgroundColor: '#000',
-                      color: '#DC143C',
-                      border: '2px solid #8B0000',
-                      fontSize: '1.2rem'
-                    }}
-                    onKeyPress={(e) => {
-                      if (e.key === 'Enter') confirmJoin();
-                    }}
-                  />
-                  <div style={{ display: 'flex', gap: '8px', justifyContent: 'center' }}>
-                    <button 
-                      onClick={confirmJoin}
-                      className="pixel-button pixel-text"
-                      style={{
-                        padding: '8px 16px',
-                        backgroundColor: '#228B22',
-                        color: 'white',
-                        border: 'none',
-                        cursor: 'pointer',
-                        fontSize: '1rem'
-                      }}
-                    >
-                      Join
-                    </button>
-                    <button 
-                      onClick={cancelJoin}
-                      className="pixel-button pixel-text"
-                      style={{
-                        padding: '8px 16px',
-                        backgroundColor: '#8B0000',
-                        color: 'white',
-                        border: 'none',
-                        cursor: 'pointer',
-                        fontSize: '1rem'
-                      }}
-                    >
-                      Cancel
-                    </button>
-                  </div>
-                </div>
-              ) : (
-                <p className="pixel-text" style={{
-                  color: '#888',
-                  fontSize: '1.2rem',
-                  textAlign: 'center'
+          {/* Players List */}
+          <div style={{ marginBottom: '20px' }}>
+            <h3 className="pixel-text" style={{
+              color: '#DC143C',
+              fontSize: '1.5rem',
+              marginBottom: '15px'
+            }}>
+              PLAYERS:
+            </h3>
+            <div style={{ maxHeight: '400px', overflowY: 'auto' }}>
+              {players.map((player, index) => (
+                <div key={player.id} style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  backgroundColor: player.id === currentUserId ? '#4a0000' : '#2a0000',
+                  padding: '15px',
+                  border: player.id === currentUserId ? '3px solid #DC143C' : '2px solid #8B0000',
+                  marginBottom: '10px'
                 }}>
-                  Empty Slot<br/>(Click to sit down)
-                </p>
-              )}
+                  <div style={{ display: 'flex', alignItems: 'center' }}>
+                    <span style={{
+                      width: '40px',
+                      height: '40px',
+                      backgroundColor: '#DC143C',
+                      color: 'white',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      marginRight: '15px',
+                      border: '2px solid #000'
+                    }} className="pixel-text">
+                      {index + 1}
+                    </span>
+                    <span className="pixel-text" style={{
+                      color: '#DC143C',
+                      fontSize: '1.3rem'
+                    }}>
+                      {player.name} {player.isHost && '(HOST)'}
+                      {player.id === currentUserId && ' (YOU)'}
+                    </span>
+                  </div>
+                  <span className="pixel-text" style={{
+                    color: player.isReady ? '#00FF00' : '#888',
+                    fontSize: '1.1rem'
+                  }}>
+                    {player.isReady ? '✅ READY' : '❌ NOT READY'}
+                  </span>
+                </div>
+              ))}
             </div>
-          ))}
-        </div>
+          </div>
 
-        {/* Leave Game Button */}
-        {myIndex !== null && (
-          <div style={{ textAlign: 'center' }}>
+          {/* Error Message */}
+          {errorMessage && (
+            <div style={{
+              marginBottom: '20px',
+              backgroundColor: '#8B0000',
+              border: '3px solid #DC143C',
+              padding: '15px',
+              textAlign: 'center'
+            }}>
+              <p className="pixel-text" style={{
+                color: '#FFD700',
+                fontSize: '1rem',
+                margin: 0
+              }}>
+                {errorMessage}
+              </p>
+            </div>
+          )}
+
+          {/* Ready/Leave Buttons */}
+          <div style={{ display: 'flex', gap: '15px', justifyContent: 'center' }}>
             <button
-              onClick={leaveGame}
+              onClick={handleToggleReady}
               className="pixel-button pixel-title"
               style={{
-                padding: '15px 40px',
+                padding: '15px 30px',
+                backgroundColor: currentPlayer?.isReady ? '#666' : '#228B22',
+                color: 'white',
+                border: 'none',
+                fontSize: '1rem',
+                cursor: 'pointer'
+              }}
+            >
+              {currentPlayer?.isReady ? 'UNREADY' : 'READY'}
+            </button>
+            <button
+              onClick={handleLeaveGame}
+              className="pixel-button pixel-title"
+              style={{
+                padding: '15px 30px',
                 backgroundColor: '#DC143C',
                 color: 'white',
                 border: 'none',
@@ -286,7 +410,7 @@ const PlayerSlotPage: React.FC = () => {
               LEAVE GAME
             </button>
           </div>
-        )}
+        </div>
       </div>
     </div>
   );

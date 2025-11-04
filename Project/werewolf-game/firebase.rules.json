@@ -1,0 +1,24 @@
+{
+  "rules": {
+    "games": {
+      "$gameCode": {
+        ".read": true,
+        ".write": "auth != null",
+        "players": {
+          "$playerId": {
+            ".write": "$playerId === auth.uid || data.parent().parent().child('hostId').val() === auth.uid"
+          }
+        },
+        "gameState": {
+          ".write": "data.parent().child('hostId').val() === auth.uid"
+        },
+        "settings": {
+          ".write": "data.parent().child('hostId').val() === auth.uid"
+        },
+        "status": {
+          ".write": "data.parent().child('hostId').val() === auth.uid"
+        }
+      }
+    }
+  }
+}

@@ -2,8 +2,13 @@ export interface Player {
   id: string;
   name: string;
   isAlive: boolean;
-  role?: string;
-  isReady?: boolean;
+  role: string;
+  seat: number;
+  isHost: boolean;
+  isReady: boolean;
+  lastSeen: number;
+  votedFor?: string;
+  isProtected?: boolean;
 }
 
 export interface GameState {

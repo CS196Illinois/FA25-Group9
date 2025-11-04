@@ -1,182 +1,376 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { QRCodeCanvas } from 'qrcode.react';
+import { useGameContext } from '../contexts/GameContext';
+import { ROLE_DEFINITIONS, getPresetRoles } from '../firebase/rolesConfig';
 
-interface RoleCategories {
-  wolf: string[];
-  god: string[];
-  neutral: string[];
+interface CustomRoleCounts {
+  [roleId: string]: number;
 }
 
 const HostGamePage: React.FC = () => {
-  const [totalPlayers, setTotalPlayers] = useState<string>('');
-  const [numWolves, setNumWolves] = useState<string>('');
-  const [numSpecialWolves, setNumSpecialWolves] = useState<string>('');
-  const [numGods, setNumGods] = useState<string>('');
-  const [numNeutral, setNumNeutral] = useState<string>('');
-  const [numVillagers, setNumVillagers] = useState<string>('');
-  const [selectedRoles, setSelectedRoles] = useState<string[]>([]);
-  const [gameCode, setGameCode] = useState<string>('');
-  const [showQR, setShowQR] = useState<boolean>(false);
-  const [waitingPlayers, setWaitingPlayers] = useState<string[]>([]);
-  const [gameDetails, setGameDetails] = useState<string>('');
-  const [qrCodeUrl, setQrCodeUrl] = useState<string>('');
+  const [hostName, setHostName] = useState<string>('');
+  const [totalPlayers, setTotalPlayers] = useState<number>(6);
+  const [usePresetRoles, setUsePresetRoles] = useState<boolean>(true);
+  const [customRoles, setCustomRoles] = useState<CustomRoleCounts>({
+    werewolf: 2,
+    doctor: 1,
+    detective: 1,
+    seer: 0,
+    villager: 2
+  });
   const [errorMessage, setErrorMessage] = useState<string>('');
+  const [isCreating, setIsCreating] = useState<boolean>(false);
 
-  const roleCategories: RoleCategories = {
-    wolf: [
-      '机械狼 Mechanical Wolf',
-      '黑狼王 Black Wolf King',
-      '白狼王 White Wolf King',
-      '狼美人 Wolf Beauty'
-    ],
-    god: [
-      '预言家 Prophet',
-      '女巫 Witch',
-      '猎人 Hunter',
-      '守卫 Guard',
-      '白痴 Idiot',
-      '长老 Elder',
-      '骑士 Knight',
-      '奇迹商人 Miracle Merchant'
-    ],
-    neutral: [
-      '混血儿 Half-Blood',
-      '丘比特 Cupid'
-    ]
+  const { gameCode, players, createGame, startGame, isHost } = useGameContext();
+
+  // Update custom roles when player count changes
+  useEffect(() => {
+    if (usePresetRoles) {
+      setCustomRoles(getPresetRoles(totalPlayers));
+    }
+  }, [totalPlayers, usePresetRoles]);
+
+  const handleCreateGame = async (): Promise<void> => {
+    if (!hostName.trim()) {
+      setErrorMessage('Please enter your name');
+      return;
+    }
+
+    if (totalPlayers < 4 || totalPlayers > 12) {
+      setErrorMessage('Player count must be between 4 and 12');
+      return;
+    }
+
+    // Validate custom roles
+    if (!usePresetRoles) {
+      const totalRoles = Object.values(customRoles).reduce((sum, count) => sum + count, 0);
+      if (totalRoles !== totalPlayers) {
+        setErrorMessage(`Total roles (${totalRoles}) must equal total players (${totalPlayers})`);
+        return;
+      }
+
+      const werewolfCount = customRoles.werewolf || 0;
+      if (werewolfCount === 0) {
+        setErrorMessage('Must have at least 1 werewolf');
+        return;
+      }
+
+      if (werewolfCount >= totalPlayers - werewolfCount) {
+        setErrorMessage('Werewolves cannot equal or outnumber villager team');
+        return;
+      }
+    }
+
+    setErrorMessage('');
+    setIsCreating(true);
+
+    try {
+      await createGame({
+        totalPlayers,
+        nightDuration: 60,
+        dayDuration: 120,
+        discussionDuration: 60,
+        votingDuration: 45,
+        usePresetRoles,
+        customRoles
+      }, hostName.trim());
+    } catch (error: any) {
+      setErrorMessage(error.message || 'Failed to create game');
+    } finally {
+      setIsCreating(false);
+    }
   };
 
-  const generateGameCode = (): string => {
-    return Math.random().toString(36).substring(2, 8).toUpperCase();
-  };
+  const handleStartGame = async (): Promise<void> => {
+    if (players.length < totalPlayers) {
+      setErrorMessage(`Waiting for ${totalPlayers - players.length} more players!`);
+      return;
+    }
 
-  const handleGenerateQR = (): void => {
-    const total = parseInt(totalPlayers) || 0;
-    const wolves = parseInt(numWolves) || 0;
-    const specialWolves = parseInt(numSpecialWolves) || 0;
-    const gods = parseInt(numGods) || 0;
-    const neutral = parseInt(numNeutral) || 0;
-    const villagers = parseInt(numVillagers) || 0;
+    const allReady = players.every(p => p.isReady);
+    if (!allReady) {
+      setErrorMessage('Not all players are ready!');
+      return;
+    }
 
     setErrorMessage('');
 
-    if (total < 6) {
-      setErrorMessage('至少需要6名玩家！Minimum 6 players required!');
-      return;
-    }
-
-    if (wolves + specialWolves + gods + neutral + villagers !== total) {
-      setErrorMessage('⚠️ 人数有误！角色数量总和必须等于玩家总数！\n⚠️ Player Count Error! Role counts must equal total players!');
-      return;
-    }
-
-    if (selectedRoles.length !== (specialWolves + gods + neutral)) {
-      setErrorMessage(`请选择 ${specialWolves + gods + neutral} 个特殊角色！\nPlease select ${specialWolves + gods + neutral} special roles!`);
-      return;
-    }
-
-    const wolfRoles = selectedRoles.filter(r => roleCategories.wolf.includes(r));
-    const godRoles = selectedRoles.filter(r => roleCategories.god.includes(r));
-    const neutralRoles = selectedRoles.filter(r => roleCategories.neutral.includes(r));
-
-    if (wolfRoles.length !== specialWolves) {
-      setErrorMessage(`请选择 ${specialWolves} 个技能狼角色！\nPlease select ${specialWolves} special wolf roles!`);
-      return;
-    }
-
-    if (godRoles.length !== gods) {
-      setErrorMessage(`请选择 ${gods} 个神职角色！\nPlease select ${gods} god roles!`);
-      return;
-    }
-
-    if (neutralRoles.length !== neutral) {
-      setErrorMessage(`请选择 ${neutral} 个中立/第三方角色！\nPlease select ${neutral} neutral roles!`);
-      return;
-    }
-
-    const code = generateGameCode();
-    setGameCode(code);
-    
-    const roleSummary = `本局角色配置 Role Configuration:
-总玩家 Total Players: ${total}
-
-狼人阵营 Wolf Camp: ${wolves + specialWolves}
-- 普通狼人 Normal Wolves: ${wolves}
-${wolfRoles.length > 0 ? `- 技能狼 Special Wolves:\n  ${wolfRoles.join('\n  ')}` : ''}
-
-神职阵营 God Camp: ${godRoles.length}
-${godRoles.length > 0 ? `${godRoles.map(r => '- ' + r).join('\n')}` : ''}
-
-中立/第三方 Neutral/Third Party: ${neutralRoles.length}
-${neutralRoles.length > 0 ? `${neutralRoles.map(r => '- ' + r).join('\n')}` : ''}
-
-村民 Villagers: ${villagers}`;
-    
-    setGameDetails(roleSummary);
-    
-    const gameUrl = `https://werewolf-game.com/join/${code}`;
-    const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=280x280&data=${encodeURIComponent(gameUrl)}`;
-    setQrCodeUrl(qrUrl);
-    setShowQR(true);
-    
-    setWaitingPlayers(['主持人 Host']);
-  };
-
-  const handleRoleToggle = (role: string): void => {
-    if (selectedRoles.includes(role)) {
-      setSelectedRoles(selectedRoles.filter(r => r !== role));
-    } else {
-      const specialWolves = parseInt(numSpecialWolves) || 0;
-      const gods = parseInt(numGods) || 0;
-      const neutral = parseInt(numNeutral) || 0;
-      const totalSpecial = specialWolves + gods + neutral;
-      
-      if (selectedRoles.length < totalSpecial) {
-        setSelectedRoles([...selectedRoles, role]);
-      } else {
-        alert(`最多只能选择 ${totalSpecial} 个特殊角色！\nMax ${totalSpecial} special roles allowed!`);
-      }
+    try {
+      await startGame();
+    } catch (error: any) {
+      setErrorMessage(error.message || 'Failed to start game');
     }
   };
 
-  const handleStartGame = (): void => {
-    if (waitingPlayers.length < parseInt(totalPlayers)) {
-      alert(`还需要 ${parseInt(totalPlayers) - waitingPlayers.length} 名玩家加入！\nWaiting for ${parseInt(totalPlayers) - waitingPlayers.length} more players!`);
-      return;
-    }
-    alert('游戏开始！Game Start!');
+  const handleRoleCountChange = (roleId: string, count: number): void => {
+    setCustomRoles(prev => ({
+      ...prev,
+      [roleId]: Math.max(0, count)
+    }));
   };
 
-  const gameUrl = `https://werewolf-game.com/join/${gameCode}`;
+  const gameUrl = gameCode ? `${window.location.origin}/join/${gameCode}` : '';
 
+  // If game is created, show lobby; otherwise show creation form
+  if (gameCode) {
+    return (
+      <div style={{
+        minHeight: '100vh',
+        backgroundColor: '#000',
+        backgroundImage: 'repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(139, 0, 0, 0.1) 2px, rgba(139, 0, 0, 0.1) 4px)',
+        padding: '20px'
+      }}>
+        <style>{`
+          @import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&family=VT323&display=swap');
+          .pixel-title {
+            font-family: 'Press Start 2P', cursive;
+            image-rendering: pixelated;
+          }
+          .pixel-text {
+            font-family: 'VT323', monospace;
+            image-rendering: pixelated;
+          }
+          .pixel-border {
+            box-shadow:
+              0 0 0 2px #8B0000,
+              0 0 0 4px #000,
+              inset 0 0 0 2px #8B0000;
+          }
+          .pixel-button {
+            box-shadow:
+              4px 0 0 #000,
+              -4px 0 0 #000,
+              0 4px 0 #000,
+              0 -4px 0 #000,
+              4px 4px 0 #000,
+              -4px -4px 0 #000,
+              4px -4px 0 #000,
+              -4px 4px 0 #000;
+            transition: all 0.1s;
+          }
+          .pixel-button:hover {
+            transform: translate(2px, 2px);
+            box-shadow:
+              2px 0 0 #000,
+              -2px 0 0 #000,
+              0 2px 0 #000,
+              0 -2px 0 #000;
+          }
+        `}</style>
+
+        <div style={{ maxWidth: '800px', margin: '0 auto' }}>
+          <div style={{ textAlign: 'center', marginBottom: '30px' }}>
+            <h1 className="pixel-title" style={{
+              fontSize: '3rem',
+              color: '#DC143C',
+              textShadow: '4px 4px 0 #000, -2px -2px 0 #8B0000',
+              letterSpacing: '0.1em'
+            }}>
+              WEREWOLF LOBBY
+            </h1>
+          </div>
+
+          <div className="pixel-border" style={{
+            background: 'linear-gradient(to bottom, #4a0000, #000)',
+            padding: '30px',
+            marginBottom: '20px'
+          }}>
+            {/* QR Code */}
+            <div style={{
+              backgroundColor: 'white',
+              padding: '20px',
+              display: 'flex',
+              justifyContent: 'center',
+              marginBottom: '20px'
+            }}>
+              <QRCodeCanvas value={gameUrl} size={256} />
+            </div>
+
+            {/* Game Code */}
+            <div style={{
+              backgroundColor: '#4a0000',
+              border: '3px solid #DC143C',
+              padding: '20px',
+              textAlign: 'center',
+              marginBottom: '20px'
+            }}>
+              <p className="pixel-text" style={{
+                color: '#DC143C',
+                fontSize: '1rem',
+                margin: '0 0 10px 0'
+              }}>
+                GAME CODE:
+              </p>
+              <p className="pixel-title" style={{
+                color: '#DC143C',
+                fontSize: '3rem',
+                letterSpacing: '0.2em',
+                margin: 0
+              }}>
+                {gameCode}
+              </p>
+            </div>
+
+            {/* Players List */}
+            <div style={{
+              backgroundColor: '#000',
+              border: '3px solid #8B0000',
+              padding: '20px',
+              marginBottom: '20px'
+            }}>
+              <h3 className="pixel-text" style={{
+                color: '#DC143C',
+                fontSize: '1.5rem',
+                marginBottom: '15px'
+              }}>
+                PLAYERS ({players.length}/{totalPlayers}):
+              </h3>
+              <div style={{ maxHeight: '300px', overflowY: 'auto' }}>
+                {players.map((player, index) => (
+                  <div key={player.id} style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    backgroundColor: '#4a0000',
+                    padding: '12px',
+                    border: '2px solid #8B0000',
+                    marginBottom: '8px'
+                  }}>
+                    <div style={{ display: 'flex', alignItems: 'center' }}>
+                      <span style={{
+                        width: '35px',
+                        height: '35px',
+                        backgroundColor: '#DC143C',
+                        color: 'white',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        marginRight: '15px',
+                        border: '2px solid #000'
+                      }} className="pixel-text">
+                        {index + 1}
+                      </span>
+                      <span className="pixel-text" style={{
+                        color: '#DC143C',
+                        fontSize: '1.2rem'
+                      }}>
+                        {player.name} {player.isHost && '(HOST)'}
+                      </span>
+                    </div>
+                    <span className="pixel-text" style={{
+                      color: player.isReady ? '#00FF00' : '#888',
+                      fontSize: '1rem'
+                    }}>
+                      {player.isReady ? 'READY' : 'NOT READY'}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Role Configuration */}
+            <div style={{
+              backgroundColor: '#4a0000',
+              border: '3px solid #FFD700',
+              padding: '20px',
+              marginBottom: '20px'
+            }}>
+              <h3 className="pixel-text" style={{
+                color: '#FFD700',
+                fontSize: '1.2rem',
+                marginBottom: '15px'
+              }}>
+                ROLE CONFIGURATION:
+              </h3>
+              <div className="pixel-text" style={{
+                color: '#FFD700',
+                fontSize: '1.1rem',
+                lineHeight: '1.8'
+              }}>
+                {usePresetRoles ? (
+                  <p>Using Preset Roles for {totalPlayers} players</p>
+                ) : (
+                  Object.entries(customRoles).map(([roleId, count]) => {
+                    const roleDef = ROLE_DEFINITIONS[roleId];
+                    return count > 0 ? (
+                      <p key={roleId} style={{ margin: '5px 0' }}>
+                        {roleDef?.icon} {roleDef?.name}: {count}
+                      </p>
+                    ) : null;
+                  })
+                )}
+              </div>
+            </div>
+
+            {/* Error Message */}
+            {errorMessage && (
+              <div style={{
+                marginBottom: '20px',
+                backgroundColor: '#8B0000',
+                border: '3px solid #DC143C',
+                padding: '15px',
+                textAlign: 'center'
+              }}>
+                <p className="pixel-text" style={{
+                  color: '#FFD700',
+                  fontSize: '1rem',
+                  margin: 0
+                }}>
+                  {errorMessage}
+                </p>
+              </div>
+            )}
+
+            {/* Start Game Button */}
+            <button
+              onClick={handleStartGame}
+              className="pixel-button pixel-title"
+              disabled={players.length < totalPlayers}
+              style={{
+                width: '100%',
+                backgroundColor: players.length < totalPlayers ? '#555' : '#228B22',
+                color: 'white',
+                padding: '20px',
+                fontSize: '1.2rem',
+                border: 'none',
+                cursor: players.length < totalPlayers ? 'not-allowed' : 'pointer',
+                opacity: players.length < totalPlayers ? 0.6 : 1
+              }}
+            >
+              START GAME
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Game creation form
   return (
     <div style={{
       minHeight: '100vh',
       backgroundColor: '#000',
       backgroundImage: 'repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(139, 0, 0, 0.1) 2px, rgba(139, 0, 0, 0.1) 4px)',
-      padding: '20px',
-      overflowX: 'hidden'
+      padding: '20px'
     }}>
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&family=VT323&display=swap');
-        
         .pixel-title {
           font-family: 'Press Start 2P', cursive;
           image-rendering: pixelated;
         }
-        
         .pixel-text {
           font-family: 'VT323', monospace;
           image-rendering: pixelated;
         }
-        
         .pixel-border {
-          box-shadow: 
+          box-shadow:
             0 0 0 2px #8B0000,
             0 0 0 4px #000,
             inset 0 0 0 2px #8B0000;
         }
-        
         .pixel-button {
-          box-shadow: 
+          box-shadow:
             4px 0 0 #000,
             -4px 0 0 #000,
             0 4px 0 #000,
@@ -187,667 +381,182 @@ ${neutralRoles.length > 0 ? `${neutralRoles.map(r => '- ' + r).join('\n')}` : ''
             -4px 4px 0 #000;
           transition: all 0.1s;
         }
-        
         .pixel-button:hover {
           transform: translate(2px, 2px);
-          box-shadow: 
+          box-shadow:
             2px 0 0 #000,
             -2px 0 0 #000,
             0 2px 0 #000,
             0 -2px 0 #000;
         }
-        
-        input, textarea {
-          image-rendering: pixelated;
-        }
-
-        .host-container {
-          max-width: 1400px;
-          margin: 0 auto;
-        }
-
-        .host-grid {
-          display: grid;
-          grid-template-columns: 1fr;
-          gap: 20px;
-        }
-
-        @media (min-width: 1024px) {
-          .host-grid {
-            grid-template-columns: 1fr 1fr;
-          }
-        }
       `}</style>
 
-      <div className="host-container">
-        {/* Header */}
+      <div style={{ maxWidth: '600px', margin: '0 auto' }}>
         <div style={{ textAlign: 'center', marginBottom: '30px' }}>
           <h1 className="pixel-title" style={{
             fontSize: '3rem',
             color: '#DC143C',
             textShadow: '4px 4px 0 #000, -2px -2px 0 #8B0000',
-            letterSpacing: '0.1em',
-            margin: '0 0 10px 0'
+            letterSpacing: '0.1em'
           }}>
-            WEREWOLF
+            HOST GAME
           </h1>
-          <h2 className="pixel-title" style={{
-            fontSize: '2.5rem',
-            color: '#DC143C',
-            textShadow: '3px 3px 0 #000',
-            margin: '0'
-          }}>
-            狼人杀
-          </h2>
         </div>
 
-        <div className="host-grid">
-          {/* Left Column - Host Game Form */}
-          <div className="pixel-border" style={{
-            background: 'linear-gradient(to bottom, #4a0000, #000)',
-            padding: '25px',
-            maxHeight: '90vh',
-            overflowY: 'auto'
-          }}>
-            <h2 className="pixel-title" style={{
-              fontSize: '1.5rem',
+        <div className="pixel-border" style={{
+          background: 'linear-gradient(to bottom, #4a0000, #000)',
+          padding: '30px'
+        }}>
+          {/* Host Name */}
+          <div style={{ marginBottom: '20px' }}>
+            <label className="pixel-text" style={{
+              display: 'block',
+              fontSize: '1.2rem',
               color: '#DC143C',
-              marginBottom: '15px'
+              marginBottom: '10px'
             }}>
-              HOST GAME
-            </h2>
-            <h3 className="pixel-text" style={{
-              fontSize: '1.3rem',
-              color: '#DC143C',
-              marginBottom: '20px'
-            }}>创建游戏</h3>
-
-            {/* Player Count */}
-            <div style={{ marginBottom: '15px' }}>
-              <label className="pixel-text" style={{
-                display: 'block',
-                fontSize: '1rem',
-                color: '#DC143C',
-                marginBottom: '8px'
-              }}>
-                # of Players 玩家人数:
-              </label>
-              <input
-                type="number"
-                min="6"
-                max="20"
-                value={totalPlayers}
-                onChange={(e) => setTotalPlayers(e.target.value)}
-                style={{
-                  width: '100%',
-                  padding: '10px',
-                  backgroundColor: '#000',
-                  border: '3px solid #8B0000',
-                  color: '#DC143C',
-                  fontSize: '1.2rem',
-                  outline: 'none'
-                }}
-                className="pixel-text"
-                placeholder="6-20"
-              />
-            </div>
-
-            {/* Normal Wolves */}
-            <div style={{ marginBottom: '15px' }}>
-              <label className="pixel-text" style={{
-                display: 'block',
-                fontSize: '1rem',
-                color: '#DC143C',
-                marginBottom: '8px'
-              }}>
-                普通狼人 Normal Wolves : #
-              </label>
-              <input
-                type="number"
-                min="0"
-                max="5"
-                value={numWolves}
-                onChange={(e) => setNumWolves(e.target.value)}
-                style={{
-                  width: '100%',
-                  padding: '10px',
-                  backgroundColor: '#000',
-                  border: '3px solid #8B0000',
-                  color: '#DC143C',
-                  fontSize: '1.2rem'
-                }}
-                className="pixel-text"
-                placeholder="0-5"
-              />
-            </div>
-
-            {/* Special Wolves */}
-            <div style={{ marginBottom: '15px' }}>
-              <label className="pixel-text" style={{
-                display: 'block',
-                fontSize: '1rem',
-                color: '#DC143C',
-                marginBottom: '8px'
-              }}>
-                技能狼 Special Wolves : #
-              </label>
-              <input
-                type="number"
-                min="0"
-                max="4"
-                value={numSpecialWolves}
-                onChange={(e) => setNumSpecialWolves(e.target.value)}
-                style={{
-                  width: '100%',
-                  padding: '10px',
-                  backgroundColor: '#000',
-                  border: '3px solid #8B0000',
-                  color: '#DC143C',
-                  fontSize: '1.2rem'
-                }}
-                className="pixel-text"
-                placeholder="0-4"
-              />
-            </div>
-
-            {/* Gods */}
-            <div style={{ marginBottom: '15px' }}>
-              <label className="pixel-text" style={{
-                display: 'block',
-                fontSize: '1rem',
-                color: '#FFD700',
-                marginBottom: '8px'
-              }}>
-                神职 Gods : #
-              </label>
-              <input
-                type="number"
-                min="0"
-                max="8"
-                value={numGods}
-                onChange={(e) => setNumGods(e.target.value)}
-                style={{
-                  width: '100%',
-                  padding: '10px',
-                  backgroundColor: '#000',
-                  border: '3px solid #8B0000',
-                  color: '#DC143C',
-                  fontSize: '1.2rem'
-                }}
-                className="pixel-text"
-                placeholder="0-8"
-              />
-            </div>
-
-            {/* Neutral */}
-            <div style={{ marginBottom: '15px' }}>
-              <label className="pixel-text" style={{
-                display: 'block',
-                fontSize: '1rem',
-                color: '#BA55D3',
-                marginBottom: '8px'
-              }}>
-                中立/第三方 Neutral : #
-              </label>
-              <input
-                type="number"
-                min="0"
-                max="2"
-                value={numNeutral}
-                onChange={(e) => setNumNeutral(e.target.value)}
-                style={{
-                  width: '100%',
-                  padding: '10px',
-                  backgroundColor: '#000',
-                  border: '3px solid #8B0000',
-                  color: '#DC143C',
-                  fontSize: '1.2rem'
-                }}
-                className="pixel-text"
-                placeholder="0-2"
-              />
-            </div>
-
-            {/* Villagers */}
-            <div style={{ marginBottom: '15px' }}>
-              <label className="pixel-text" style={{
-                display: 'block',
-                fontSize: '1rem',
-                color: '#888',
-                marginBottom: '8px'
-              }}>
-                村民 Villagers : #
-              </label>
-              <input
-                type="number"
-                min="0"
-                max="15"
-                value={numVillagers}
-                onChange={(e) => setNumVillagers(e.target.value)}
-                style={{
-                  width: '100%',
-                  padding: '10px',
-                  backgroundColor: '#000',
-                  border: '3px solid #8B0000',
-                  color: '#DC143C',
-                  fontSize: '1.2rem'
-                }}
-                className="pixel-text"
-                placeholder="0-15"
-              />
-            </div>
-
-            {/* Role Selection */}
-            {(parseInt(numSpecialWolves) > 0 || parseInt(numGods) > 0 || parseInt(numNeutral) > 0) && (
-              <div style={{ marginBottom: '15px' }}>
-                <label className="pixel-text" style={{
-                  display: 'block',
-                  fontSize: '1rem',
-                  color: '#DC143C',
-                  marginBottom: '8px'
-                }}>
-                  选择特殊角色 Select Roles ({selectedRoles.length}/{(parseInt(numSpecialWolves) || 0) + (parseInt(numGods) || 0) + (parseInt(numNeutral) || 0)}):
-                </label>
-                <div style={{
-                  backgroundColor: '#000',
-                  border: '3px solid #8B0000',
-                  padding: '10px',
-                  maxHeight: '200px',
-                  overflowY: 'auto'
-                }}>
-                  {parseInt(numSpecialWolves) > 0 && (
-                    <div style={{ marginBottom: '15px' }}>
-                      <h4 className="pixel-text" style={{
-                        color: '#DC143C',
-                        fontSize: '1rem',
-                        borderBottom: '2px solid #8B0000',
-                        paddingBottom: '5px',
-                        marginBottom: '10px'
-                      }}>
-                        🐺 技能狼 ({selectedRoles.filter(r => roleCategories.wolf.includes(r)).length}/{numSpecialWolves})
-                      </h4>
-                      {roleCategories.wolf.map((role, index) => (
-                        <div key={`wolf-${index}`} style={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          marginBottom: '8px',
-                          padding: '5px',
-                          cursor: 'pointer'
-                        }}>
-                          <input
-                            type="checkbox"
-                            id={`wolf-role-${index}`}
-                            checked={selectedRoles.includes(role)}
-                            onChange={() => handleRoleToggle(role)}
-                            style={{ marginRight: '10px', width: '18px', height: '18px' }}
-                          />
-                          <label htmlFor={`wolf-role-${index}`} className="pixel-text" style={{
-                            color: '#DC143C',
-                            fontSize: '0.9rem',
-                            cursor: 'pointer'
-                          }}>
-                            {role}
-                          </label>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-
-                  {parseInt(numGods) > 0 && (
-                    <div style={{ marginBottom: '15px' }}>
-                      <h4 className="pixel-text" style={{
-                        color: '#FFD700',
-                        fontSize: '1rem',
-                        borderBottom: '2px solid #FFD700',
-                        paddingBottom: '5px',
-                        marginBottom: '10px'
-                      }}>
-                        ⭐ 神职 ({selectedRoles.filter(r => roleCategories.god.includes(r)).length}/{numGods})
-                      </h4>
-                      {roleCategories.god.map((role, index) => (
-                        <div key={`god-${index}`} style={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          marginBottom: '8px',
-                          padding: '5px'
-                        }}>
-                          <input
-                            type="checkbox"
-                            id={`god-role-${index}`}
-                            checked={selectedRoles.includes(role)}
-                            onChange={() => handleRoleToggle(role)}
-                            style={{ marginRight: '10px', width: '18px', height: '18px' }}
-                          />
-                          <label htmlFor={`god-role-${index}`} className="pixel-text" style={{
-                            color: '#DC143C',
-                            fontSize: '0.9rem',
-                            cursor: 'pointer'
-                          }}>
-                            {role}
-                          </label>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-
-                  {parseInt(numNeutral) > 0 && (
-                    <div>
-                      <h4 className="pixel-text" style={{
-                        color: '#BA55D3',
-                        fontSize: '1rem',
-                        borderBottom: '2px solid #BA55D3',
-                        paddingBottom: '5px',
-                        marginBottom: '10px'
-                      }}>
-                        🎭 中立/第三方 ({selectedRoles.filter(r => roleCategories.neutral.includes(r)).length}/{numNeutral})
-                      </h4>
-                      {roleCategories.neutral.map((role, index) => (
-                        <div key={`neutral-${index}`} style={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          marginBottom: '8px',
-                          padding: '5px'
-                        }}>
-                          <input
-                            type="checkbox"
-                            id={`neutral-role-${index}`}
-                            checked={selectedRoles.includes(role)}
-                            onChange={() => handleRoleToggle(role)}
-                            style={{ marginRight: '10px', width: '18px', height: '18px' }}
-                          />
-                          <label htmlFor={`neutral-role-${index}`} className="pixel-text" style={{
-                            color: '#DC143C',
-                            fontSize: '0.9rem',
-                            cursor: 'pointer'
-                          }}>
-                            {role}
-                          </label>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              </div>
-            )}
-
-            {/* Game Details */}
-            <div style={{ marginBottom: '20px' }}>
-              <label className="pixel-text" style={{
-                display: 'block',
-                fontSize: '1rem',
-                color: '#DC143C',
-                marginBottom: '8px'
-              }}>
-                游戏详情 Details:
-              </label>
-              <textarea
-                value={gameDetails}
-                onChange={(e) => setGameDetails(e.target.value)}
-                style={{
-                  width: '100%',
-                  padding: '10px',
-                  backgroundColor: '#000',
-                  border: '3px solid #8B0000',
-                  color: '#DC143C',
-                  fontSize: '0.9rem',
-                  height: '120px',
-                  resize: 'vertical'
-                }}
-                className="pixel-text"
-                placeholder="角色配置将自动生成..."
-              />
-            </div>
-
-            {/* Error Message */}
-            {errorMessage && (
-              <div style={{
-                marginBottom: '15px',
-                backgroundColor: '#8B0000',
-                border: '3px solid #DC143C',
-                padding: '15px',
-                textAlign: 'center'
-              }}>
-                <p className="pixel-text" style={{
-                  color: '#FFD700',
-                  fontSize: '0.9rem',
-                  whiteSpace: 'pre-line',
-                  margin: 0
-                }}>
-                  {errorMessage}
-                </p>
-              </div>
-            )}
-
-            {/* Generate QR Button */}
-            <button
-              onClick={handleGenerateQR}
-              className="pixel-button pixel-title"
+              Your Name:
+            </label>
+            <input
+              type="text"
+              value={hostName}
+              onChange={(e) => setHostName(e.target.value)}
+              placeholder="Enter your name"
               style={{
                 width: '100%',
-                backgroundColor: '#8B0000',
-                color: 'white',
-                padding: '15px',
-                fontSize: '1rem',
-                border: 'none',
-                cursor: 'pointer'
-              }}
-            >
-              GENERATE QR
-            </button>
-          </div>
-
-          {/* Right Column - QR Code */}
-          <div className="pixel-border" style={{
-            background: 'linear-gradient(to bottom, #4a0000, #000)',
-            padding: '25px',
-            maxHeight: '90vh',
-            overflowY: 'auto'
-          }}>
-            <h2 className="pixel-title" style={{
-              fontSize: '1.5rem',
-              color: '#DC143C',
-              marginBottom: '15px'
-            }}>
-              QR CODE
-            </h2>
-            <h3 className="pixel-text" style={{
-              fontSize: '1.3rem',
-              color: '#DC143C',
-              marginBottom: '20px'
-            }}>二维码</h3>
-
-            {showQR ? (
-              <div>
-                {/* QR Code Image */}
-                <div style={{
-                  backgroundColor: '#000',
-                  padding: '20px',
-                  border: '3px solid #8B0000',
-                  display: 'flex',
-                  justifyContent: 'center',
-                  alignItems: 'center',
-                  marginBottom: '15px'
-                }}>
-                  <img 
-                    src={qrCodeUrl} 
-                    alt="Game QR Code"
-                    style={{ width: '280px', height: '280px', imageRendering: 'pixelated' }}
-                  />
-                </div>
-
-                {/* Game Code */}
-                <div style={{
-                  backgroundColor: '#4a0000',
-                  border: '3px solid #DC143C',
-                  padding: '15px',
-                  textAlign: 'center',
-                  marginBottom: '15px'
-                }}>
-                  <p className="pixel-text" style={{
-                    color: '#DC143C',
-                    fontSize: '0.8rem',
-                    margin: '0 0 5px 0'
-                  }}>游戏代码 CODE:</p>
-                  <p className="pixel-title" style={{
-                    color: '#DC143C',
-                    fontSize: '2rem',
-                    letterSpacing: '0.1em',
-                    margin: 0
-                  }}>{gameCode}</p>
-                </div>
-
-                {/* Share Link */}
-                <div style={{
-                  backgroundColor: '#000',
-                  border: '3px solid #8B0000',
-                  padding: '10px',
-                  marginBottom: '15px'
-                }}>
-                  <p className="pixel-text" style={{
-                    color: '#DC143C',
-                    fontSize: '0.8rem',
-                    margin: '0 0 5px 0'
-                  }}>分享链接 LINK:</p>
-                  <p className="pixel-text" style={{
-                    color: '#DC143C',
-                    fontSize: '0.9rem',
-                    wordBreak: 'break-all',
-                    margin: 0
-                  }}>{gameUrl}</p>
-                </div>
-
-                {/* Waiting Players */}
-                <div style={{
-                  backgroundColor: '#000',
-                  border: '3px solid #8B0000',
-                  padding: '15px',
-                  marginBottom: '15px'
-                }}>
-                  <h3 className="pixel-text" style={{
-                    color: '#DC143C',
-                    fontSize: '1rem',
-                    marginBottom: '10px'
-                  }}>
-                    等待玩家 WAITING ({waitingPlayers.length}/{totalPlayers}):
-                  </h3>
-                  <div style={{ maxHeight: '120px', overflowY: 'auto' }}>
-                    {waitingPlayers.map((player, index) => (
-                      <div key={index} style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        backgroundColor: '#4a0000',
-                        padding: '8px',
-                        border: '2px solid #8B0000',
-                        marginBottom: '5px'
-                      }}>
-                        <span style={{
-                          width: '30px',
-                          height: '30px',
-                          backgroundColor: '#DC143C',
-                          color: 'white',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          marginRight: '10px',
-                          border: '2px solid #000'
-                        }} className="pixel-text">
-                          {index + 1}
-                        </span>
-                        <span className="pixel-text" style={{ color: '#DC143C' }}>{player}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Game Config */}
-                <div style={{
-                  backgroundColor: '#4a0000',
-                  border: '3px solid #FFD700',
-                  padding: '15px',
-                  marginBottom: '15px'
-                }}>
-                  <h3 className="pixel-text" style={{
-                    color: '#FFD700',
-                    fontSize: '1rem',
-                    marginBottom: '10px'
-                  }}>
-                    游戏配置 CONFIG:
-                  </h3>
-                  <div className="pixel-text" style={{
-                    color: '#FFD700',
-                    fontSize: '0.9rem',
-                    lineHeight: '1.5'
-                  }}>
-                    <p style={{ margin: '5px 0' }}>• 总玩家 Total: {totalPlayers}</p>
-                    <p style={{ margin: '5px 0' }}>• 普通狼人 Normal: {numWolves}</p>
-                    {(() => {
-                      const wolfRoles = selectedRoles.filter(r => roleCategories.wolf.includes(r));
-                      const godRoles = selectedRoles.filter(r => roleCategories.god.includes(r));
-                      const neutralRoles = selectedRoles.filter(r => roleCategories.neutral.includes(r));
-                      return (
-                        <>
-                          {wolfRoles.length > 0 && (
-                            <>
-                              <p style={{ margin: '5px 0' }}>• 技能狼 Special: {wolfRoles.length}</p>
-                              <p style={{ margin: '5px 0 5px 15px', fontSize: '0.8rem' }}>{wolfRoles.join(', ')}</p>
-                            </>
-                          )}
-                          {godRoles.length > 0 && (
-                            <>
-                              <p style={{ margin: '5px 0' }}>• 神职 Gods: {godRoles.length}</p>
-                              <p style={{ margin: '5px 0 5px 15px', fontSize: '0.8rem' }}>{godRoles.join(', ')}</p>
-                            </>
-                          )}
-                          {neutralRoles.length > 0 && (
-                            <>
-                              <p style={{ margin: '5px 0' }}>• 中立 Neutral: {neutralRoles.length}</p>
-                              <p style={{ margin: '5px 0 5px 15px', fontSize: '0.8rem' }}>{neutralRoles.join(', ')}</p>
-                            </>
-                          )}
-                        </>
-                      );
-                    })()}
-                    <p style={{ margin: '5px 0' }}>• 村民 Villagers: {numVillagers}</p>
-                  </div>
-                </div>
-
-                {/* Start Game Button */}
-                <button
-                  onClick={handleStartGame}
-                  className="pixel-button pixel-title"
-                  style={{
-                    width: '100%',
-                    backgroundColor: '#228B22',
-                    color: 'white',
-                    padding: '15px',
-                    fontSize: '1rem',
-                    border: 'none',
-                    cursor: 'pointer'
-                  }}
-                >
-                  START GAME
-                </button>
-              </div>
-            ) : (
-              <div style={{
+                padding: '12px',
                 backgroundColor: '#000',
                 border: '3px solid #8B0000',
-                height: '400px',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center'
-              }}>
-                <div className="pixel-text" style={{
-                  color: '#DC143C',
-                  fontSize: '1.2rem',
-                  textAlign: 'center'
-                }}>
-                  等待生成...<br/>
-                  WAITING...
-                </div>
-              </div>
-            )}
+                color: '#DC143C',
+                fontSize: '1.2rem',
+                outline: 'none'
+              }}
+              className="pixel-text"
+            />
           </div>
+
+          {/* Player Count */}
+          <div style={{ marginBottom: '20px' }}>
+            <label className="pixel-text" style={{
+              display: 'block',
+              fontSize: '1.2rem',
+              color: '#DC143C',
+              marginBottom: '10px'
+            }}>
+              Number of Players: {totalPlayers}
+            </label>
+            <input
+              type="range"
+              min="4"
+              max="12"
+              value={totalPlayers}
+              onChange={(e) => setTotalPlayers(parseInt(e.target.value))}
+              style={{ width: '100%' }}
+            />
+          </div>
+
+          {/* Preset vs Custom */}
+          <div style={{ marginBottom: '20px' }}>
+            <label className="pixel-text" style={{
+              display: 'flex',
+              alignItems: 'center',
+              fontSize: '1.2rem',
+              color: '#DC143C',
+              cursor: 'pointer',
+              marginBottom: '10px'
+            }}>
+              <input
+                type="checkbox"
+                checked={usePresetRoles}
+                onChange={(e) => setUsePresetRoles(e.target.checked)}
+                style={{ marginRight: '10px', width: '20px', height: '20px' }}
+              />
+              Use Preset Roles
+            </label>
+          </div>
+
+          {/* Custom Role Configuration */}
+          {!usePresetRoles && (
+            <div style={{
+              backgroundColor: '#000',
+              border: '3px solid #8B0000',
+              padding: '15px',
+              marginBottom: '20px'
+            }}>
+              <h3 className="pixel-text" style={{
+                color: '#DC143C',
+                fontSize: '1.2rem',
+                marginBottom: '15px'
+              }}>
+                Custom Roles:
+              </h3>
+              {Object.entries(ROLE_DEFINITIONS).map(([roleId, roleDef]) => (
+                <div key={roleId} style={{ marginBottom: '15px' }}>
+                  <label className="pixel-text" style={{
+                    display: 'block',
+                    fontSize: '1rem',
+                    color: roleDef.color,
+                    marginBottom: '5px'
+                  }}>
+                    {roleDef.icon} {roleDef.name}: {customRoles[roleId] || 0}
+                  </label>
+                  <input
+                    type="range"
+                    min={roleDef.minCount}
+                    max={roleDef.maxCount}
+                    value={customRoles[roleId] || 0}
+                    onChange={(e) => handleRoleCountChange(roleId, parseInt(e.target.value))}
+                    style={{ width: '100%' }}
+                  />
+                  <p className="pixel-text" style={{
+                    fontSize: '0.9rem',
+                    color: '#888',
+                    marginTop: '5px'
+                  }}>
+                    {roleDef.description}
+                  </p>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Error Message */}
+          {errorMessage && (
+            <div style={{
+              marginBottom: '20px',
+              backgroundColor: '#8B0000',
+              border: '3px solid #DC143C',
+              padding: '15px',
+              textAlign: 'center'
+            }}>
+              <p className="pixel-text" style={{
+                color: '#FFD700',
+                fontSize: '1rem',
+                margin: 0
+              }}>
+                {errorMessage}
+              </p>
+            </div>
+          )}
+
+          {/* Create Game Button */}
+          <button
+            onClick={handleCreateGame}
+            disabled={isCreating}
+            className="pixel-button pixel-title"
+            style={{
+              width: '100%',
+              backgroundColor: isCreating ? '#555' : '#8B0000',
+              color: 'white',
+              padding: '20px',
+              fontSize: '1.2rem',
+              border: 'none',
+              cursor: isCreating ? 'not-allowed' : 'pointer',
+              opacity: isCreating ? 0.6 : 1
+            }}
+          >
+            {isCreating ? 'CREATING...' : 'CREATE GAME'}
+          </button>
         </div>
       </div>
     </div>
