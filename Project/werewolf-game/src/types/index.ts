@@ -9,6 +9,18 @@ export interface Player {
   lastSeen: number;
   votedFor?: string;
   isProtected?: boolean;
+  lastInvestigation?: {
+    targetId: string;
+    targetName: string;
+    result: 'werewolf' | 'villager';
+    round: number;
+  };
+  lastVision?: {
+    targetId: string;
+    targetName: string;
+    role: string;
+    round: number;
+  };
 }
 
 export interface GameState {

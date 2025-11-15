@@ -464,6 +464,210 @@ class GameService {
       return false;
     }
   }
+
+  /**
+   * Process night phase actions - handle werewolf kills and doctor protection
+   * Returns the player ID who was eliminated (or null if protected)
+   */
+  async processNightActions(gameCode: string): Promise<string | null> {
+    try {
+      const gameRef = ref(database, DB_PATHS.gameByCode(gameCode));
+      const gameSnapshot = await get(gameRef);
+
+      if (!gameSnapshot.exists()) {
+        throw new Error('Game not found');
+      }
+
+      const game: Game = gameSnapshot.val();
+      const players = Object.values(game.players);
+
+      // Find werewolves and tally their votes
+      const werewolves = players.filter(p => p.role === 'werewolf' && p.isAlive);
+      const werewolfVotes: { [targetId: string]: number } = {};
+
+      werewolves.forEach(werewolf => {
+        if (werewolf.votedFor) {
+          werewolfVotes[werewolf.votedFor] = (werewolfVotes[werewolf.votedFor] || 0) + 1;
+        }
+      });
+
+      // Find the player with most werewolf votes
+      let targetId: string | null = null;
+      let maxVotes = 0;
+
+      Object.entries(werewolfVotes).forEach(([playerId, voteCount]) => {
+        if (voteCount > maxVotes) {
+          maxVotes = voteCount;
+          targetId = playerId;
+        }
+      });
+
+      // Check if target was protected by doctor
+      if (targetId) {
+        const targetPlayer = game.players[targetId];
+        if (targetPlayer && targetPlayer.isProtected) {
+          console.log(`Player ${targetId} was protected by doctor`);
+          // Store in gameState that someone was attacked but saved
+          await update(ref(database, DB_PATHS.gameState(gameCode)), {
+            lastNightResult: 'protected'
+          });
+          return null; // No one dies
+        }
+
+        // Eliminate the target
+        await this.eliminatePlayer(gameCode, targetId);
+        await update(ref(database, DB_PATHS.gameState(gameCode)), {
+          eliminatedPlayer: targetId,
+          lastNightResult: 'killed'
+        });
+        console.log(`Player ${targetId} was eliminated by werewolves`);
+        return targetId;
+      }
+
+      return null;
+    } catch (error) {
+      console.error('Failed to process night actions:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Tally votes and eliminate the player with most votes
+   * Returns the eliminated player ID (or null if tie)
+   */
+  async tallyVotes(gameCode: string): Promise<string | null> {
+    try {
+      const gameRef = ref(database, DB_PATHS.gameByCode(gameCode));
+      const gameSnapshot = await get(gameRef);
+
+      if (!gameSnapshot.exists()) {
+        throw new Error('Game not found');
+      }
+
+      const game: Game = gameSnapshot.val();
+      const players = Object.values(game.players);
+      const alivePlayers = players.filter(p => p.isAlive);
+
+      // Tally votes from alive players
+      const voteCounts: { [targetId: string]: number } = {};
+
+      alivePlayers.forEach(player => {
+        if (player.votedFor) {
+          voteCounts[player.votedFor] = (voteCounts[player.votedFor] || 0) + 1;
+        }
+      });
+
+      // Find player(s) with most votes
+      let maxVotes = 0;
+      const candidates: string[] = [];
+
+      Object.entries(voteCounts).forEach(([playerId, voteCount]) => {
+        if (voteCount > maxVotes) {
+          maxVotes = voteCount;
+          candidates.length = 0;
+          candidates.push(playerId);
+        } else if (voteCount === maxVotes && voteCount > 0) {
+          candidates.push(playerId);
+        }
+      });
+
+      // If tie, no one is eliminated
+      if (candidates.length !== 1 || maxVotes === 0) {
+        console.log('Vote resulted in tie or no votes - no elimination');
+        await update(ref(database, DB_PATHS.gameState(gameCode)), {
+          eliminatedPlayer: null,
+          voteResult: 'tie'
+        });
+        return null;
+      }
+
+      const eliminatedId = candidates[0];
+      await this.eliminatePlayer(gameCode, eliminatedId);
+      await update(ref(database, DB_PATHS.gameState(gameCode)), {
+        eliminatedPlayer: eliminatedId,
+        voteResult: 'success'
+      });
+
+      console.log(`Player ${eliminatedId} was eliminated by vote with ${maxVotes} votes`);
+      return eliminatedId;
+    } catch (error) {
+      console.error('Failed to tally votes:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Store detective investigation result
+   */
+  async investigatePlayer(gameCode: string, detectiveId: string, targetId: string): Promise<void> {
+    try {
+      const gameRef = ref(database, DB_PATHS.gameByCode(gameCode));
+      const gameSnapshot = await get(gameRef);
+
+      if (!gameSnapshot.exists()) {
+        throw new Error('Game not found');
+      }
+
+      const game: Game = gameSnapshot.val();
+      const targetPlayer = game.players[targetId];
+
+      if (!targetPlayer) {
+        throw new Error('Target player not found');
+      }
+
+      // Determine if target is werewolf or villager (detective only sees team, not exact role)
+      const result = targetPlayer.role === 'werewolf' ? 'werewolf' : 'villager';
+
+      // Store investigation result on detective's player object
+      const detectiveRef = ref(database, `${DB_PATHS.gameByCode(gameCode)}/players/${detectiveId}/lastInvestigation`);
+      await set(detectiveRef, {
+        targetId,
+        targetName: targetPlayer.name,
+        result,
+        round: game.gameState.round
+      });
+
+      console.log(`Detective ${detectiveId} investigated ${targetId}, result: ${result}`);
+    } catch (error) {
+      console.error('Failed to investigate player:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Store seer vision result (sees exact role)
+   */
+  async seerVision(gameCode: string, seerId: string, targetId: string): Promise<void> {
+    try {
+      const gameRef = ref(database, DB_PATHS.gameByCode(gameCode));
+      const gameSnapshot = await get(gameRef);
+
+      if (!gameSnapshot.exists()) {
+        throw new Error('Game not found');
+      }
+
+      const game: Game = gameSnapshot.val();
+      const targetPlayer = game.players[targetId];
+
+      if (!targetPlayer) {
+        throw new Error('Target player not found');
+      }
+
+      // Seer sees exact role
+      const seerRef = ref(database, `${DB_PATHS.gameByCode(gameCode)}/players/${seerId}/lastVision`);
+      await set(seerRef, {
+        targetId,
+        targetName: targetPlayer.name,
+        role: targetPlayer.role,
+        round: game.gameState.round
+      });
+
+      console.log(`Seer ${seerId} viewed ${targetId}, role: ${targetPlayer.role}`);
+    } catch (error) {
+      console.error('Failed to perform seer vision:', error);
+      throw error;
+    }
+  }
 }
 
 // Export singleton instance

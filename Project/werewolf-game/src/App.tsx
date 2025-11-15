@@ -4,40 +4,33 @@ import TitlePage from './pages/TitlePage';
 import HostGamePage from './pages/HostGamePage';
 import PlayerSlotPage from './pages/PlayerSlotPage';
 import MainGamePage from './pages/MainGamePage';
-import { GameState } from './types';
 import './App.css';
 
 type Page = 'title' | 'host' | 'lobby' | 'game';
 
 function App() {
   const [currentPage, setCurrentPage] = useState<Page>('title');
-  const [gameState, setGameState] = useState<GameState>({
-    players: [],
-    timer: 60,
-    gamePhase: 'night',
-    round: 1
-  });
 
   return (
     <GameProvider>
       <div className="App">
         {currentPage === 'title' && (
-          <TitlePage 
+          <TitlePage
             onHost={() => setCurrentPage('host')}
             onJoin={() => setCurrentPage('lobby')}
           />
         )}
-        
+
         {currentPage === 'host' && (
           <HostGamePage />
         )}
-        
+
         {currentPage === 'lobby' && (
           <PlayerSlotPage />
         )}
-        
+
         {currentPage === 'game' && (
-          <MainGamePage gameState={gameState} />
+          <MainGamePage />
         )}
 
         {/* Debug Navigation */}

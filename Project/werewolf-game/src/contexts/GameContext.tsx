@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState, useEffect, useCallback } fr
 import { Player } from '../types';
 import gameService from '../firebase/gameService';
 import { Game, GameSettings as FirebaseGameSettings } from '../firebase/schema';
+import { haveWerewolvesWon, haveVillagersWon } from '../firebase/rolesConfig';
 
 type Phase = 'lobby' | 'night' | 'day' | 'discussion' | 'voting' | 'results' | 'finished';
 
@@ -25,6 +26,12 @@ interface GameContextType {
   currentUserId: string | null;
   isHost: boolean;
   gameStatus: 'waiting' | 'playing' | 'finished';
+  gameStateData: {
+    winningSide?: 'werewolves' | 'villagers';
+    eliminatedPlayer?: string;
+    lastNightResult?: 'killed' | 'protected';
+    voteResult?: 'success' | 'tie';
+  };
   setPlayers: (players: Player[]) => void;
   setSettings: (settings: GameSettings) => void;
   setGameCode: (code: string) => void;
@@ -34,6 +41,9 @@ interface GameContextType {
   setPlayerReady: (ready: boolean) => Promise<void>;
   startGame: () => Promise<void>;
   submitVote: (targetId: string) => Promise<void>;
+  protectPlayer: (targetId: string) => Promise<void>;
+  investigatePlayer: (targetId: string) => Promise<void>;
+  seerVision: (targetId: string) => Promise<void>;
   leaveGame: () => Promise<void>;
 }
 
@@ -59,6 +69,12 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [isHost, setIsHost] = useState<boolean>(false);
   const [gameStatus, setGameStatus] = useState<'waiting' | 'playing' | 'finished'>('waiting');
+  const [gameStateData, setGameStateData] = useState<{
+    winningSide?: 'werewolves' | 'villagers';
+    eliminatedPlayer?: string;
+    lastNightResult?: 'killed' | 'protected';
+    voteResult?: 'success' | 'tie';
+  }>({});
 
   // Subscribe to Firebase game updates
   useEffect(() => {
@@ -86,6 +102,12 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setTimeLeft(game.gameState.timeRemaining);
       setRound(game.gameState.round);
       setGameStatus(game.status);
+      setGameStateData({
+        winningSide: game.gameState.winningSide,
+        eliminatedPlayer: game.gameState.eliminatedPlayer,
+        lastNightResult: game.gameState.lastNightResult,
+        voteResult: game.gameState.voteResult
+      });
 
       // Update settings
       setSettings({
@@ -204,6 +226,42 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   }, [gameCode, currentUserId]);
 
+  // Protect a player (doctor ability)
+  const protectPlayer = useCallback(async (targetId: string): Promise<void> => {
+    if (!gameCode || !currentUserId) return;
+
+    try {
+      await gameService.protectPlayer(gameCode, targetId);
+    } catch (error) {
+      console.error('Failed to protect player:', error);
+      throw error;
+    }
+  }, [gameCode, currentUserId]);
+
+  // Investigate a player (detective ability)
+  const investigatePlayer = useCallback(async (targetId: string): Promise<void> => {
+    if (!gameCode || !currentUserId) return;
+
+    try {
+      await gameService.investigatePlayer(gameCode, currentUserId, targetId);
+    } catch (error) {
+      console.error('Failed to investigate player:', error);
+      throw error;
+    }
+  }, [gameCode, currentUserId]);
+
+  // Seer vision (seer ability)
+  const seerVision = useCallback(async (targetId: string): Promise<void> => {
+    if (!gameCode || !currentUserId) return;
+
+    try {
+      await gameService.seerVision(gameCode, currentUserId, targetId);
+    } catch (error) {
+      console.error('Failed to use seer vision:', error);
+      throw error;
+    }
+  }, [gameCode, currentUserId]);
+
   // Leave the game
   const leaveGame = useCallback(async (): Promise<void> => {
     if (!gameCode || !currentUserId) return;
@@ -223,46 +281,84 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const advancePhase = useCallback(async () => {
     if (!gameCode || !isHost) return;
 
-    let nextPhase: Phase;
-    let nextTime: number;
-
-    switch (currentPhase) {
-      case 'night':
-        nextPhase = 'day';
-        nextTime = settings.dayDuration;
-        break;
-      case 'day':
-        nextPhase = 'discussion';
-        nextTime = settings.discussionDuration;
-        break;
-      case 'discussion':
-        nextPhase = 'voting';
-        nextTime = settings.votingDuration;
-        break;
-      case 'voting':
-        nextPhase = 'results';
-        nextTime = 30;
-        break;
-      case 'results':
-        nextPhase = 'night';
-        nextTime = settings.nightDuration;
-        break;
-      default:
-        nextPhase = 'night';
-        nextTime = settings.nightDuration;
-    }
-
     try {
-      await gameService.updateGamePhase(gameCode, nextPhase, nextTime);
+      let nextPhase: Phase;
+      let nextTime: number;
 
-      // Increment round when going back to night
-      if (nextPhase === 'night' && currentPhase === 'results') {
-        // Round increment is handled by Firebase
+      // Process game logic BEFORE transitioning phases
+      switch (currentPhase) {
+        case 'night':
+          // Process night actions (werewolf kills, doctor protection)
+          await gameService.processNightActions(gameCode);
+
+          // Clear protections for next round
+          await gameService.clearProtections(gameCode);
+
+          // Check win conditions after night elimination
+          const alivePlayers = players.filter(p => p.isAlive);
+          if (haveWerewolvesWon(alivePlayers)) {
+            await gameService.endGame(gameCode, 'werewolves');
+            return;
+          }
+          if (haveVillagersWon(alivePlayers)) {
+            await gameService.endGame(gameCode, 'villagers');
+            return;
+          }
+
+          nextPhase = 'day';
+          nextTime = settings.dayDuration;
+          break;
+
+        case 'day':
+          // Day phase is just for discussion/announcement
+          nextPhase = 'discussion';
+          nextTime = settings.discussionDuration;
+          break;
+
+        case 'discussion':
+          // Transition to voting phase
+          nextPhase = 'voting';
+          nextTime = settings.votingDuration;
+          break;
+
+        case 'voting':
+          // Tally votes and eliminate player
+          await gameService.tallyVotes(gameCode);
+
+          // Clear votes for next round
+          await gameService.clearVotes(gameCode);
+
+          // Check win conditions after day elimination
+          const aliveAfterVote = players.filter(p => p.isAlive);
+          if (haveWerewolvesWon(aliveAfterVote)) {
+            await gameService.endGame(gameCode, 'werewolves');
+            return;
+          }
+          if (haveVillagersWon(aliveAfterVote)) {
+            await gameService.endGame(gameCode, 'villagers');
+            return;
+          }
+
+          nextPhase = 'results';
+          nextTime = 30;
+          break;
+
+        case 'results':
+          // Go back to night phase and increment round
+          nextPhase = 'night';
+          nextTime = settings.nightDuration;
+          break;
+
+        default:
+          nextPhase = 'night';
+          nextTime = settings.nightDuration;
       }
+
+      await gameService.updateGamePhase(gameCode, nextPhase, nextTime);
     } catch (error) {
       console.error('Failed to advance phase:', error);
     }
-  }, [gameCode, isHost, currentPhase, settings]);
+  }, [gameCode, isHost, currentPhase, settings, players]);
 
   return (
     <GameContext.Provider value={{
@@ -275,6 +371,7 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
       currentUserId,
       isHost,
       gameStatus,
+      gameStateData,
       setPlayers,
       setSettings,
       setGameCode,
@@ -284,6 +381,9 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setPlayerReady,
       startGame,
       submitVote,
+      protectPlayer,
+      investigatePlayer,
+      seerVision,
       leaveGame,
     }}>
       {children}

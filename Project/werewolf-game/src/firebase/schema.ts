@@ -21,6 +21,18 @@ export interface Player {
   lastSeen: number;
   votedFor?: string;
   isProtected?: boolean;
+  lastInvestigation?: {
+    targetId: string;
+    targetName: string;
+    result: 'werewolf' | 'villager';
+    round: number;
+  };
+  lastVision?: {
+    targetId: string;
+    targetName: string;
+    role: string;
+    round: number;
+  };
 }
 
 export interface GameState {
@@ -30,6 +42,8 @@ export interface GameState {
   lastUpdate: number;
   winningSide?: 'werewolves' | 'villagers';
   eliminatedPlayer?: string;
+  lastNightResult?: 'killed' | 'protected';
+  voteResult?: 'success' | 'tie';
 }
 
 export interface Game {

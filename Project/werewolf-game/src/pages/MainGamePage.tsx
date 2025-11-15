@@ -1,19 +1,29 @@
 import React, { useEffect, useState } from 'react';
-import { GameState } from '../types';
+import { useGameContext } from '../contexts/GameContext';
+import { ROLE_DEFINITIONS } from '../firebase/rolesConfig';
 
-interface MainGamePageProps {
-  gameState: GameState;
-}
-
-const MainGamePage: React.FC<MainGamePageProps> = ({ gameState }) => {
+const MainGamePage: React.FC = () => {
+  const {
+    currentPhase,
+    timeLeft,
+    players,
+    round,
+    currentUserId,
+    gameStatus,
+    gameStateData,
+    submitVote,
+    protectPlayer,
+    investigatePlayer,
+    seerVision
+  } = useGameContext();
   const [message, setMessage] = useState('');
   type MessageType = 'public' | 'whisper';
-  interface ChatMessage { 
-    id: number; 
-    content: string; 
-    timestamp: Date; 
-    type: MessageType; 
-    to?: string | null; 
+  interface ChatMessage {
+    id: number;
+    content: string;
+    timestamp: Date;
+    type: MessageType;
+    to?: string | null;
     toName?: string | null;
   }
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -21,6 +31,18 @@ const MainGamePage: React.FC<MainGamePageProps> = ({ gameState }) => {
   const [whisperTarget, setWhisperTarget] = useState<string | null>(null);
   const [notes, setNotes] = useState('');
   const [selectedPlayer, setSelectedPlayer] = useState<string | null>(null);
+  const [actionTaken, setActionTaken] = useState(false);
+
+  // Get current player
+  const currentPlayer = players.find(p => p.id === currentUserId);
+  const currentRole = currentPlayer?.role || '';
+  const isAlive = currentPlayer?.isAlive ?? true;
+
+  // Reset action taken when phase changes
+  useEffect(() => {
+    setActionTaken(false);
+    setSelectedPlayer(null);
+  }, [currentPhase, round]);
 
   useEffect(() => {
     const saved = localStorage.getItem('werewolf_notes');
@@ -41,13 +63,183 @@ const MainGamePage: React.FC<MainGamePageProps> = ({ gameState }) => {
     return `${h}:${minuteStr} ${ampm}`;
   };
 
+  // Handle role-specific night actions
+  const handleNightAction = async () => {
+    if (!selectedPlayer || actionTaken) return;
+
+    try {
+      switch (currentRole) {
+        case 'werewolf':
+          await submitVote(selectedPlayer);
+          setActionTaken(true);
+          break;
+        case 'doctor':
+          await protectPlayer(selectedPlayer);
+          setActionTaken(true);
+          break;
+        case 'detective':
+          await investigatePlayer(selectedPlayer);
+          setActionTaken(true);
+          break;
+        case 'seer':
+          await seerVision(selectedPlayer);
+          setActionTaken(true);
+          break;
+      }
+    } catch (error) {
+      console.error('Failed to perform action:', error);
+    }
+  };
+
+  // Get action button text based on role and phase
+  const getActionButtonText = () => {
+    if (actionTaken) return 'Action Submitted';
+
+    if (currentPhase === 'night') {
+      switch (currentRole) {
+        case 'werewolf': return 'Vote to Kill';
+        case 'doctor': return 'Protect Player';
+        case 'detective': return 'Investigate Player';
+        case 'seer': return 'View Role';
+        default: return 'No Action';
+      }
+    }
+
+    if (currentPhase === 'voting') {
+      return 'Vote to Eliminate';
+    }
+
+    return 'No Action';
+  };
+
+  // Get werewolf teammates for display during night
+  const getWerewolfTeam = () => {
+    return players.filter(p => p.role === 'werewolf' && p.isAlive);
+  };
+
+  // Get phase message
+  const getPhaseMessage = () => {
+    if (gameStatus === 'finished') {
+      return 'Game Over!';
+    }
+
+    switch (currentPhase) {
+      case 'night':
+        if (currentRole === 'werewolf') {
+          return 'Werewolves, choose your victim...';
+        } else if (currentRole === 'doctor') {
+          return 'Doctor, choose who to protect...';
+        } else if (currentRole === 'detective') {
+          return 'Detective, choose who to investigate...';
+        } else if (currentRole === 'seer') {
+          return 'Seer, choose whose role to see...';
+        } else {
+          return 'Night time... sleep tight.';
+        }
+      case 'day':
+        return 'Morning has come. Review what happened last night.';
+      case 'discussion':
+        return 'Discuss who you think the werewolf is!';
+      case 'voting':
+        return 'Time to vote! Choose who to eliminate.';
+      case 'results':
+        return 'Votes are being counted...';
+      default:
+        return 'Welcome to Werewolf!';
+    }
+  };
+
+  // Determine if player can take action
+  const canTakeAction = () => {
+    if (!isAlive || actionTaken) return false;
+
+    if (currentPhase === 'night') {
+      return ['werewolf', 'doctor', 'detective', 'seer'].includes(currentRole);
+    }
+
+    if (currentPhase === 'voting') {
+      return true;
+    }
+
+    return false;
+  };
+
+  // Show game over screen
+  if (gameStatus === 'finished' && gameStateData.winningSide) {
+    return (
+      <div style={{
+        minHeight: '100vh',
+        backgroundColor: '#000',
+        backgroundImage: 'repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(139, 0, 0, 0.1) 2px, rgba(139, 0, 0, 0.1) 4px)',
+        color: 'white',
+        fontFamily: 'Arial, sans-serif',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: '20px'
+      }}>
+        <style>{`
+          @import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&family=VT323&display=swap');
+          .pixel-title { font-family: 'Press Start 2P', cursive; image-rendering: pixelated; }
+          .pixel-text { font-family: 'VT323', monospace; image-rendering: pixelated; }
+          .pixel-border { box-shadow: 0 0 0 2px #8B0000, 0 0 0 4px #000, inset 0 0 0 2px #8B0000; }
+        `}</style>
+
+        <div className="pixel-border" style={{
+          backgroundColor: '#1a0000',
+          padding: '40px',
+          maxWidth: '600px',
+          textAlign: 'center'
+        }}>
+          <h1 className="pixel-title" style={{
+            fontSize: '2.5rem',
+            color: gameStateData.winningSide === 'werewolves' ? '#DC143C' : '#FFD700',
+            marginBottom: '20px',
+            textShadow: '3px 3px 0 #000'
+          }}>
+            GAME OVER
+          </h1>
+
+          <div className="pixel-text" style={{ fontSize: '1.8rem', marginBottom: '30px', color: '#DC143C' }}>
+            {gameStateData.winningSide === 'werewolves' ? '🐺 WEREWOLVES WIN! 🐺' : '👨‍🌾 VILLAGERS WIN! 👨‍🌾'}
+          </div>
+
+          <div style={{ marginBottom: '30px' }}>
+            <h3 className="pixel-title" style={{ fontSize: '1rem', color: '#FFD700', marginBottom: '15px' }}>
+              FINAL STANDINGS
+            </h3>
+            {players.map(player => (
+              <div key={player.id} className="pixel-text" style={{
+                padding: '10px',
+                marginBottom: '8px',
+                backgroundColor: '#000',
+                border: '2px solid #8B0000',
+                fontSize: '1.1rem',
+                color: player.isAlive ? '#00FF00' : '#888',
+                textDecoration: player.isAlive ? 'none' : 'line-through'
+              }}>
+                {ROLE_DEFINITIONS[player.role]?.icon} {player.name} - {ROLE_DEFINITIONS[player.role]?.name}
+                {!player.isAlive && ' ☠️'}
+              </div>
+            ))}
+          </div>
+
+          <div className="pixel-text" style={{ color: '#888', fontSize: '1rem' }}>
+            Game lasted {round} rounds
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div style={{
       minHeight: '100vh',
       backgroundColor: '#000',
       backgroundImage: 'repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(139, 0, 0, 0.1) 2px, rgba(139, 0, 0, 0.1) 4px)',
       color: 'white',
-      fontFamily: 'Arial, sans-serif'
+      fontFamily: 'Arial, sans-serif',
+      position: 'relative'
     }}>
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&family=VT323&display=swap');
@@ -126,20 +318,31 @@ const MainGamePage: React.FC<MainGamePageProps> = ({ gameState }) => {
             marginBottom: '5px',
             color: '#DC143C'
           }}>
-            Time Remaining: <strong style={{ color: '#FFD700' }}>{gameState.timer}s</strong>
+            Time Remaining: <strong style={{ color: '#FFD700' }}>{timeLeft}s</strong>
           </div>
           <div className="pixel-text" style={{
             fontSize: '1.1rem',
             color: '#888'
           }}>
-            Phase: {gameState.gamePhase}
+            Phase: {currentPhase} | Round: {round}
           </div>
         </div>
         <div className="pixel-text" style={{
           fontSize: '1.2rem',
           color: '#DC143C'
         }}>
-          Your Role: <strong style={{ color: '#FFD700' }}>[Role Name]</strong>
+          Your Role: <strong style={{ color: '#FFD700' }}>
+            {currentRole ? ROLE_DEFINITIONS[currentRole]?.icon + ' ' + ROLE_DEFINITIONS[currentRole]?.name : 'Unknown'}
+          </strong>
+        </div>
+        <div className="pixel-text" style={{
+          fontSize: '1rem',
+          color: '#FFD700',
+          fontStyle: 'italic',
+          width: '100%',
+          textAlign: 'center'
+        }}>
+          {getPhaseMessage()}
         </div>
       </div>
 
@@ -157,53 +360,85 @@ const MainGamePage: React.FC<MainGamePageProps> = ({ gameState }) => {
           overflowY: 'auto',
           borderRight: '3px solid #8B0000'
         }}>
-          <h3 className="pixel-title" style={{ 
+          <h3 className="pixel-title" style={{
             margin: '0 0 15px 0',
             fontSize: '1rem',
             textAlign: 'center',
             color: '#DC143C'
           }}>
-            PLAYERS ({gameState.players.length})
+            PLAYERS ({players.length})
           </h3>
-          
-          <div style={{ marginBottom: '20px' }}>
-            {gameState.players.map(player => (
-              <div 
-                key={player.id}
-                onClick={() => setSelectedPlayer(player.id)}
-                className="pixel-text"
-                style={{
-                  padding: '12px',
-                  margin: '8px 0',
-                  backgroundColor: selectedPlayer === player.id ? '#228B22' : '#000',
-                  border: '2px solid #8B0000',
-                  color: '#DC143C',
-                  cursor: 'pointer',
-                  opacity: player.isAlive ? 1 : 0.5,
-                  textDecoration: player.isAlive ? 'none' : 'line-through',
-                  transition: 'all 0.2s',
-                  fontSize: '1.1rem'
-                }}
-              >
-                {player.name}
+
+          {/* Show werewolf team during night */}
+          {currentPhase === 'night' && currentRole === 'werewolf' && (
+            <div style={{
+              padding: '10px',
+              marginBottom: '15px',
+              backgroundColor: '#1a0000',
+              border: '2px solid #DC143C'
+            }}>
+              <div className="pixel-text" style={{ color: '#DC143C', fontSize: '1rem', marginBottom: '5px' }}>
+                🐺 Your Pack:
               </div>
-            ))}
+              {getWerewolfTeam().map(wolf => (
+                <div key={wolf.id} className="pixel-text" style={{ color: '#FFD700', fontSize: '0.9rem' }}>
+                  • {wolf.name}
+                </div>
+              ))}
+            </div>
+          )}
+
+          <div style={{ marginBottom: '20px', maxHeight: '400px', overflowY: 'auto' }}>
+            {players.map(player => {
+              const canSelectThisPlayer = isAlive && player.isAlive && player.id !== currentUserId;
+
+              return (
+                <div
+                  key={player.id}
+                  onClick={() => canSelectThisPlayer && setSelectedPlayer(player.id)}
+                  className="pixel-text"
+                  style={{
+                    padding: '12px',
+                    margin: '8px 0',
+                    backgroundColor: selectedPlayer === player.id ? '#228B22' : '#000',
+                    border: `2px solid ${player.id === currentUserId ? '#FFD700' : '#8B0000'}`,
+                    color: player.id === currentUserId ? '#FFD700' : '#DC143C',
+                    cursor: canSelectThisPlayer ? 'pointer' : 'default',
+                    opacity: player.isAlive ? 1 : 0.5,
+                    textDecoration: player.isAlive ? 'none' : 'line-through',
+                    transition: 'all 0.2s',
+                    fontSize: '1.1rem'
+                  }}
+                >
+                  {player.name} {player.id === currentUserId && '(You)'}
+                  {!player.isAlive && ' ☠️'}
+                </div>
+              );
+            })}
           </div>
-          
-          <button 
-            disabled={!selectedPlayer}
+
+          <button
+            disabled={!selectedPlayer || !canTakeAction()}
+            onClick={async () => {
+              if (currentPhase === 'voting') {
+                await submitVote(selectedPlayer!);
+                setActionTaken(true);
+              } else if (currentPhase === 'night') {
+                await handleNightAction();
+              }
+            }}
             className="pixel-button pixel-text"
             style={{
               width: '100%',
               padding: '12px',
-              backgroundColor: selectedPlayer ? '#8B0000' : '#3a0000',
+              backgroundColor: (selectedPlayer && canTakeAction()) ? '#8B0000' : '#3a0000',
               color: 'white',
               border: 'none',
-              cursor: selectedPlayer ? 'pointer' : 'not-allowed',
+              cursor: (selectedPlayer && canTakeAction()) ? 'pointer' : 'not-allowed',
               fontSize: '1rem'
             }}
           >
-            Vote to Eliminate
+            {getActionButtonText()}
           </button>
         </div>
 
@@ -288,7 +523,7 @@ const MainGamePage: React.FC<MainGamePageProps> = ({ gameState }) => {
                 }}
               >
                 <option value="">Select player</option>
-                {gameState.players.map(p => (
+                {players.map(p => (
                   <option key={p.id} value={p.id}>{p.name}</option>
                 ))}
               </select>
@@ -297,11 +532,11 @@ const MainGamePage: React.FC<MainGamePageProps> = ({ gameState }) => {
 
           {/* Chat Input */}
           <div style={{ display: 'flex', gap: '10px', marginBottom: '15px' }}>
-            <input 
-              value={message} 
+            <input
+              value={message}
               onChange={(e) => setMessage(e.target.value)}
-              disabled={gameState.gamePhase === 'night'}
-              placeholder="Type your message..."
+              disabled={currentPhase === 'night'}
+              placeholder={currentPhase === 'night' ? 'Chat disabled during night...' : 'Type your message...'}
               className="pixel-text"
               style={{
                 flex: 1,
@@ -323,14 +558,14 @@ const MainGamePage: React.FC<MainGamePageProps> = ({ gameState }) => {
                   };
                   if (messageType === 'whisper') {
                     chatMsg.to = whisperTarget ?? null;
-                    chatMsg.toName = gameState.players.find(p => p.id === whisperTarget)?.name ?? null;
+                    chatMsg.toName = players.find(p => p.id === whisperTarget)?.name ?? null;
                   }
                   setMessages(prev => [...prev, chatMsg]);
                   setMessage('');
                 }
               }}
             />
-            <button 
+            <button
               onClick={() => {
                 if (message.trim()) {
                   const chatMsg: ChatMessage = {
@@ -343,19 +578,20 @@ const MainGamePage: React.FC<MainGamePageProps> = ({ gameState }) => {
                   };
                   if (messageType === 'whisper') {
                     chatMsg.to = whisperTarget ?? null;
-                    chatMsg.toName = gameState.players.find(p => p.id === whisperTarget)?.name ?? null;
+                    chatMsg.toName = players.find(p => p.id === whisperTarget)?.name ?? null;
                   }
                   setMessages(prev => [...prev, chatMsg]);
                   setMessage('');
                 }
               }}
+              disabled={currentPhase === 'night'}
               className="pixel-button pixel-text"
               style={{
                 padding: '12px 24px',
-                backgroundColor: '#228B22',
+                backgroundColor: currentPhase === 'night' ? '#3a3a3a' : '#228B22',
                 color: 'white',
                 border: 'none',
-                cursor: 'pointer',
+                cursor: currentPhase === 'night' ? 'not-allowed' : 'pointer',
                 fontSize: '1rem'
               }}
             >
@@ -364,17 +600,18 @@ const MainGamePage: React.FC<MainGamePageProps> = ({ gameState }) => {
           </div>
 
           {/* Quick Comments */}
-          <div style={{ display: 'flex', gap: '8px', marginBottom: '15px' }}>
+          <div style={{ display: 'flex', gap: '8px' }}>
             {['👍', '👎', '🤔', '😱'].map((emoji, i) => (
-              <button 
+              <button
                 key={i}
+                disabled={currentPhase === 'night'}
                 className="pixel-button"
                 style={{
                   padding: '10px 15px',
                   fontSize: '1.5rem',
-                  backgroundColor: '#228B22',
+                  backgroundColor: currentPhase === 'night' ? '#3a3a3a' : '#228B22',
                   border: 'none',
-                  cursor: 'pointer'
+                  cursor: currentPhase === 'night' ? 'not-allowed' : 'pointer'
                 }}
                 onClick={() => {
                   const chatMsg: ChatMessage = {
@@ -392,18 +629,6 @@ const MainGamePage: React.FC<MainGamePageProps> = ({ gameState }) => {
               </button>
             ))}
           </div>
-
-          {/* End Turn Button */}
-          <button className="pixel-button pixel-title" style={{
-            padding: '12px',
-            backgroundColor: '#228B22',
-            color: 'white',
-            border: 'none',
-            cursor: 'pointer',
-            fontSize: '1rem'
-          }}>
-            END TURN
-          </button>
         </div>
 
         {/* Right Panel - Notes */}
@@ -503,6 +728,172 @@ const MainGamePage: React.FC<MainGamePageProps> = ({ gameState }) => {
           </button>
         </div>
       </div>
+
+      {/* Phase Results Overlay */}
+      {currentPhase === 'day' && gameStateData.eliminatedPlayer && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: 'rgba(0, 0, 0, 0.9)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 1000
+        }}>
+          <div className="pixel-border" style={{
+            backgroundColor: '#1a0000',
+            padding: '40px',
+            maxWidth: '500px',
+            textAlign: 'center'
+          }}>
+            <h2 className="pixel-title" style={{
+              fontSize: '1.5rem',
+              color: '#DC143C',
+              marginBottom: '20px'
+            }}>
+              NIGHT PHASE RESULTS
+            </h2>
+
+            {gameStateData.lastNightResult === 'killed' && (
+              <>
+                <div className="pixel-text" style={{ fontSize: '1.5rem', marginBottom: '20px', color: '#FF0000' }}>
+                  ☠️ SOMEONE HAS DIED ☠️
+                </div>
+                <div className="pixel-text" style={{ fontSize: '1.3rem', color: '#FFD700' }}>
+                  {players.find(p => p.id === gameStateData.eliminatedPlayer)?.name} was killed by werewolves!
+                </div>
+              </>
+            )}
+
+            {gameStateData.lastNightResult === 'protected' && (
+              <>
+                <div className="pixel-text" style={{ fontSize: '1.5rem', marginBottom: '20px', color: '#00FF00' }}>
+                  ✨ A LIFE WAS SAVED ✨
+                </div>
+                <div className="pixel-text" style={{ fontSize: '1.3rem', color: '#FFD700' }}>
+                  The doctor protected someone from the werewolves!
+                </div>
+              </>
+            )}
+
+            {!gameStateData.lastNightResult && (
+              <div className="pixel-text" style={{ fontSize: '1.3rem', color: '#FFD700' }}>
+                The night was quiet... no one died.
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Results Phase Overlay */}
+      {currentPhase === 'results' && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: 'rgba(0, 0, 0, 0.9)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 1000
+        }}>
+          <div className="pixel-border" style={{
+            backgroundColor: '#1a0000',
+            padding: '40px',
+            maxWidth: '500px',
+            textAlign: 'center'
+          }}>
+            <h2 className="pixel-title" style={{
+              fontSize: '1.5rem',
+              color: '#DC143C',
+              marginBottom: '20px'
+            }}>
+              VOTING RESULTS
+            </h2>
+
+            {gameStateData.voteResult === 'success' && gameStateData.eliminatedPlayer && (
+              <>
+                <div className="pixel-text" style={{ fontSize: '1.5rem', marginBottom: '20px', color: '#FF0000' }}>
+                  ⚖️ THE VILLAGE HAS SPOKEN ⚖️
+                </div>
+                <div className="pixel-text" style={{ fontSize: '1.3rem', color: '#FFD700' }}>
+                  {players.find(p => p.id === gameStateData.eliminatedPlayer)?.name} has been eliminated!
+                </div>
+                <div className="pixel-text" style={{ fontSize: '1.1rem', color: '#888', marginTop: '15px' }}>
+                  They were a {ROLE_DEFINITIONS[players.find(p => p.id === gameStateData.eliminatedPlayer)?.role || '']?.name}
+                </div>
+              </>
+            )}
+
+            {gameStateData.voteResult === 'tie' && (
+              <>
+                <div className="pixel-text" style={{ fontSize: '1.5rem', marginBottom: '20px', color: '#FFD700' }}>
+                  🤝 IT'S A TIE 🤝
+                </div>
+                <div className="pixel-text" style={{ fontSize: '1.3rem', color: '#DC143C' }}>
+                  No one could agree... no one was eliminated.
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Investigation Results (Detective/Seer) */}
+      {currentPlayer?.lastInvestigation && currentPlayer.lastInvestigation.round === round && currentPhase === 'day' && (
+        <div style={{
+          position: 'fixed',
+          top: '20px',
+          right: '20px',
+          zIndex: 999
+        }}>
+          <div className="pixel-border" style={{
+            backgroundColor: '#1a3a5a',
+            padding: '20px',
+            maxWidth: '300px'
+          }}>
+            <div className="pixel-title" style={{ fontSize: '0.8rem', color: '#FFD700', marginBottom: '10px' }}>
+              🔍 INVESTIGATION RESULT
+            </div>
+            <div className="pixel-text" style={{ fontSize: '1.1rem', color: 'white' }}>
+              {currentPlayer.lastInvestigation.targetName} is a{' '}
+              <strong style={{ color: currentPlayer.lastInvestigation.result === 'werewolf' ? '#FF0000' : '#00FF00' }}>
+                {currentPlayer.lastInvestigation.result.toUpperCase()}
+              </strong>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {currentPlayer?.lastVision && currentPlayer.lastVision.round === round && currentPhase === 'day' && (
+        <div style={{
+          position: 'fixed',
+          top: '20px',
+          right: '20px',
+          zIndex: 999
+        }}>
+          <div className="pixel-border" style={{
+            backgroundColor: '#3a1a5a',
+            padding: '20px',
+            maxWidth: '300px'
+          }}>
+            <div className="pixel-title" style={{ fontSize: '0.8rem', color: '#FFD700', marginBottom: '10px' }}>
+              👁️ SEER VISION
+            </div>
+            <div className="pixel-text" style={{ fontSize: '1.1rem', color: 'white' }}>
+              {currentPlayer.lastVision.targetName} is a{' '}
+              <strong style={{ color: '#FFD700' }}>
+                {ROLE_DEFINITIONS[currentPlayer.lastVision.role]?.name.toUpperCase()}
+              </strong>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
