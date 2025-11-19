@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { GameState } from '../types';
+import VoiceChatControls from '../components/VoiceChatControls';
 
 interface MainGamePageProps {
   gameState: GameState;
@@ -141,6 +142,21 @@ const MainGamePage: React.FC<MainGamePageProps> = ({ gameState }) => {
         }}>
           Your Role: <strong style={{ color: '#FFD700' }}>[Role Name]</strong>
         </div>
+      </div>
+
+      {/* Voice Chat Controls */}
+      <div style={{
+        background: 'linear-gradient(to bottom, #1a0000, #000)',
+        padding: '15px 20px',
+        borderBottom: '2px solid #8B0000'
+      }}>
+        <VoiceChatControls
+          gameCode="test-game-123"
+          playerName="Player"
+          gamePhase={gameState.gamePhase}
+          playerRole="villager"
+          autoJoin={true}
+        />
       </div>
 
       {/* Main Content */}
