@@ -277,6 +277,15 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   }, [gameCode, currentUserId]);
 
+  // Helper function to convert Player array to object format for win condition checks
+  const playersArrayToObject = (playerArray: Player[]): { [key: string]: Player } => {
+    const playersObj: { [key: string]: Player } = {};
+    playerArray.forEach(player => {
+      playersObj[player.id] = player;
+    });
+    return playersObj;
+  };
+
   // Advance to next phase (host only)
   const advancePhase = useCallback(async () => {
     if (!gameCode || !isHost) return;
@@ -296,11 +305,12 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
           // Check win conditions after night elimination
           const alivePlayers = players.filter(p => p.isAlive);
-          if (haveWerewolvesWon(alivePlayers)) {
+          const alivePlayersObj = playersArrayToObject(alivePlayers);
+          if (haveWerewolvesWon(alivePlayersObj)) {
             await gameService.endGame(gameCode, 'werewolves');
             return;
           }
-          if (haveVillagersWon(alivePlayers)) {
+          if (haveVillagersWon(alivePlayersObj)) {
             await gameService.endGame(gameCode, 'villagers');
             return;
           }
@@ -330,11 +340,12 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
           // Check win conditions after day elimination
           const aliveAfterVote = players.filter(p => p.isAlive);
-          if (haveWerewolvesWon(aliveAfterVote)) {
+          const aliveAfterVoteObj = playersArrayToObject(aliveAfterVote);
+          if (haveWerewolvesWon(aliveAfterVoteObj)) {
             await gameService.endGame(gameCode, 'werewolves');
             return;
           }
-          if (haveVillagersWon(aliveAfterVote)) {
+          if (haveVillagersWon(aliveAfterVoteObj)) {
             await gameService.endGame(gameCode, 'villagers');
             return;
           }
