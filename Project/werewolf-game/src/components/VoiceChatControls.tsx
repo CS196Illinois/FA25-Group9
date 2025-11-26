@@ -18,21 +18,17 @@ const VoiceChatControls: React.FC<VoiceChatControlsProps> = ({
 }) => {
   const { isJoined, isMuted, participants, joinRoom, leaveRoom, toggleMute, error } = useVoiceChat();
 
-  // TODO: Replace with your actual Daily.co domain from https://dashboard.daily.co/
-  // Get a free domain by creating a Daily.co account
-  const roomUrl = `https://werewolf-game.daily.co/${gameCode}`;
-
   useEffect(() => {
-    if (autoJoin && !isJoined && playerName) {
-      joinRoom(roomUrl, playerName);
+    if (autoJoin && !isJoined && playerName && gameCode) {
+      // Use game code as the Agora channel name
+      joinRoom(gameCode, playerName);
     }
 
     return () => {
-      if (isJoined) {
-        leaveRoom();
-      }
+      // Don't auto-leave on unmount to allow navigation
+      // User can manually leave with the button
     };
-  }, []); // Only run on mount
+  }, [autoJoin, isJoined, playerName, gameCode]); // Only run when these change
 
   // Determine if voice should be restricted based on game phase
   const isVoiceRestricted = () => {
@@ -93,7 +89,7 @@ const VoiceChatControls: React.FC<VoiceChatControlsProps> = ({
           fontSize: '0.8rem',
           color: '#888'
         }}>
-          {participants.length} connected
+          {participants.length + 1} connected
         </div>
       </div>
 
@@ -177,9 +173,23 @@ const VoiceChatControls: React.FC<VoiceChatControlsProps> = ({
         }}>
           In voice chat:
         </div>
-        {participants.map((participant) => (
+        {/* Show local user */}
+        <div className="pixel-text" style={{
+          padding: '6px',
+          fontSize: '0.85rem',
+          color: '#DC143C',
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center'
+        }}>
+          <span>{playerName}</span>
+          <span style={{ color: '#FFD700' }}>(You)</span>
+          {isMuted && <span>🔇</span>}
+        </div>
+        {/* Show remote users */}
+        {participants.map((participantId) => (
           <div
-            key={participant.session_id}
+            key={participantId}
             className="pixel-text"
             style={{
               padding: '6px',
@@ -190,9 +200,7 @@ const VoiceChatControls: React.FC<VoiceChatControlsProps> = ({
               alignItems: 'center'
             }}
           >
-            <span>{participant.user_name || 'Anonymous'}</span>
-            {participant.local && <span style={{ color: '#FFD700' }}>(You)</span>}
-            {participant.audio === false && <span>🔇</span>}
+            <span>User {participantId.substring(0, 8)}</span>
           </div>
         ))}
       </div>
