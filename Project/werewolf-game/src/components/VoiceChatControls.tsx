@@ -18,7 +18,9 @@ const VoiceChatControls: React.FC<VoiceChatControlsProps> = ({
 }) => {
   const { isJoined, isMuted, participants, joinRoom, leaveRoom, toggleMute, error } = useVoiceChat();
 
-  const roomUrl = `https://your-domain.daily.co/${gameCode}`;
+  // TODO: Replace with your actual Daily.co domain from https://dashboard.daily.co/
+  // Get a free domain by creating a Daily.co account
+  const roomUrl = `https://werewolf-game.daily.co/${gameCode}`;
 
   useEffect(() => {
     if (autoJoin && !isJoined && playerName) {
