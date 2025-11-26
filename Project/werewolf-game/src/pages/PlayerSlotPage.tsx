@@ -1,11 +1,22 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useGameContext } from '../contexts/GameContext';
 
-const PlayerSlotPage: React.FC = () => {
-  const [gameCodeInput, setGameCodeInput] = useState<string>('');
+interface PlayerSlotPageProps {
+  initialGameCode?: string;
+}
+
+const PlayerSlotPage: React.FC<PlayerSlotPageProps> = ({ initialGameCode }) => {
+  const [gameCodeInput, setGameCodeInput] = useState<string>(initialGameCode || '');
   const [playerNameInput, setPlayerNameInput] = useState<string>('');
   const [errorMessage, setErrorMessage] = useState<string>('');
   const [isJoining, setIsJoining] = useState<boolean>(false);
+
+  // Update game code if initialGameCode prop changes
+  useEffect(() => {
+    if (initialGameCode) {
+      setGameCodeInput(initialGameCode);
+    }
+  }, [initialGameCode]);
 
   const {
     gameCode,

@@ -83,11 +83,17 @@ export const VoiceChatProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   }, [client]);
 
   const leaveRoom = useCallback(async () => {
-    if (!isJoined) return;
+    if (!isJoined) {
+      console.log('Not joined to any channel');
+      return;
+    }
 
     try {
-      // Stop and close local audio track
+      console.log('Leaving voice chat...');
+
+      // Unpublish the local audio track
       if (localAudioTrack.current) {
+        await client.unpublish([localAudioTrack.current]);
         localAudioTrack.current.stop();
         localAudioTrack.current.close();
         localAudioTrack.current = null;
@@ -99,9 +105,14 @@ export const VoiceChatProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       setIsJoined(false);
       setParticipants([]);
       setIsMuted(false);
-      console.log('Left voice chat');
+      console.log('Successfully left voice chat');
     } catch (err) {
       console.error('Error leaving room:', err);
+      setError('Failed to leave voice chat');
+      // Force reset state even if there's an error
+      setIsJoined(false);
+      setParticipants([]);
+      setIsMuted(false);
     }
   }, [client, isJoined]);
 

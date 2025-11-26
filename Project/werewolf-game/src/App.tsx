@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { GameProvider } from './contexts/GameContext';
+import React, { useState, useEffect } from 'react';
+import { GameProvider, useGameContext } from './contexts/GameContext';
 import { VoiceChatProvider } from './contexts/VoiceChatContext';
 import TitlePage from './pages/TitlePage';
 import HostGamePage from './pages/HostGamePage';
@@ -9,41 +9,72 @@ import './App.css';
 
 type Page = 'title' | 'host' | 'lobby' | 'game';
 
-function App() {
+// Inner component that has access to GameContext
+const AppContent: React.FC = () => {
   const [currentPage, setCurrentPage] = useState<Page>('title');
+  const [urlGameCode, setUrlGameCode] = useState<string | null>(null);
+  const { gameStatus, gameCode } = useGameContext();
+
+  // Check URL for /join/:gameCode on mount
+  useEffect(() => {
+    const path = window.location.pathname;
+    const joinMatch = path.match(/\/join\/([A-Z0-9]+)/);
+    if (joinMatch && joinMatch[1]) {
+      setUrlGameCode(joinMatch[1]);
+      setCurrentPage('lobby');
+    }
+  }, []);
+
+  // Auto-navigate to game when status changes to 'playing'
+  useEffect(() => {
+    if (gameStatus === 'playing' && gameCode) {
+      setCurrentPage('game');
+    } else if (gameStatus === 'waiting' && gameCode) {
+      // Stay in lobby if waiting
+      if (currentPage === 'title' || currentPage === 'host') {
+        // Don't auto-navigate if we're still in setup
+      }
+    }
+  }, [gameStatus, gameCode]);
 
   return (
-    <GameProvider>
-      <VoiceChatProvider>
-        <div className="App">
-          {currentPage === 'title' && (
-            <TitlePage
-              onHost={() => setCurrentPage('host')}
-              onJoin={() => setCurrentPage('lobby')}
-            />
-          )}
+    <VoiceChatProvider>
+      <div className="App">
+        {currentPage === 'title' && (
+          <TitlePage
+            onHost={() => setCurrentPage('host')}
+            onJoin={() => setCurrentPage('lobby')}
+          />
+        )}
 
-          {currentPage === 'host' && (
-            <HostGamePage />
-          )}
+        {currentPage === 'host' && (
+          <HostGamePage />
+        )}
 
-          {currentPage === 'lobby' && (
-            <PlayerSlotPage />
-          )}
+        {currentPage === 'lobby' && (
+          <PlayerSlotPage initialGameCode={urlGameCode || undefined} />
+        )}
 
-          {currentPage === 'game' && (
-            <MainGamePage />
-          )}
+        {currentPage === 'game' && (
+          <MainGamePage />
+        )}
 
-          {/* Debug Navigation */}
-          <div style={{ position: 'fixed', bottom: 10, left: 10, display: 'flex', gap: '5px' }}>
-            <button onClick={() => setCurrentPage('title')}>Title</button>
-            <button onClick={() => setCurrentPage('host')}>Host</button>
-            <button onClick={() => setCurrentPage('lobby')}>Lobby</button>
-            <button onClick={() => setCurrentPage('game')}>Game</button>
-          </div>
+        {/* Debug Navigation */}
+        <div style={{ position: 'fixed', bottom: 10, left: 10, display: 'flex', gap: '5px', zIndex: 9999 }}>
+          <button onClick={() => setCurrentPage('title')} style={{ padding: '5px 10px', fontSize: '0.7rem' }}>Title</button>
+          <button onClick={() => setCurrentPage('host')} style={{ padding: '5px 10px', fontSize: '0.7rem' }}>Host</button>
+          <button onClick={() => setCurrentPage('lobby')} style={{ padding: '5px 10px', fontSize: '0.7rem' }}>Lobby</button>
+          <button onClick={() => setCurrentPage('game')} style={{ padding: '5px 10px', fontSize: '0.7rem' }}>Game</button>
         </div>
-      </VoiceChatProvider>
+      </div>
+    </VoiceChatProvider>
+  );
+};
+
+function App() {
+  return (
+    <GameProvider>
+      <AppContent />
     </GameProvider>
   );
 }
