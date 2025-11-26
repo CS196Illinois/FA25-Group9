@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useGameContext } from '../contexts/GameContext';
 import { ROLE_DEFINITIONS } from '../firebase/rolesConfig';
+import VoiceChatControls from '../components/VoiceChatControls';
 
 const MainGamePage: React.FC = () => {
   const {
@@ -11,6 +12,7 @@ const MainGamePage: React.FC = () => {
     currentUserId,
     gameStatus,
     gameStateData,
+    gameCode,
     submitVote,
     protectPlayer,
     investigatePlayer,
@@ -345,6 +347,23 @@ const MainGamePage: React.FC = () => {
           {getPhaseMessage()}
         </div>
       </div>
+
+      {/* Voice Chat Controls */}
+      {gameCode && currentPlayer && (
+        <div style={{
+          background: 'linear-gradient(to bottom, #1a0000, #000)',
+          padding: '15px 20px',
+          borderBottom: '2px solid #8B0000'
+        }}>
+          <VoiceChatControls
+            gameCode={gameCode}
+            playerName={currentPlayer.name}
+            gamePhase={currentPhase}
+            playerRole={currentRole}
+            autoJoin={true}
+          />
+        </div>
+      )}
 
       {/* Main Content */}
       <div style={{

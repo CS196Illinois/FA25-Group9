@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { GameProvider } from './contexts/GameContext';
+import { VoiceChatProvider } from './contexts/VoiceChatContext';
 import TitlePage from './pages/TitlePage';
 import HostGamePage from './pages/HostGamePage';
 import PlayerSlotPage from './pages/PlayerSlotPage';
@@ -13,34 +14,36 @@ function App() {
 
   return (
     <GameProvider>
-      <div className="App">
-        {currentPage === 'title' && (
-          <TitlePage
-            onHost={() => setCurrentPage('host')}
-            onJoin={() => setCurrentPage('lobby')}
-          />
-        )}
+      <VoiceChatProvider>
+        <div className="App">
+          {currentPage === 'title' && (
+            <TitlePage
+              onHost={() => setCurrentPage('host')}
+              onJoin={() => setCurrentPage('lobby')}
+            />
+          )}
 
-        {currentPage === 'host' && (
-          <HostGamePage />
-        )}
+          {currentPage === 'host' && (
+            <HostGamePage />
+          )}
 
-        {currentPage === 'lobby' && (
-          <PlayerSlotPage />
-        )}
+          {currentPage === 'lobby' && (
+            <PlayerSlotPage />
+          )}
 
-        {currentPage === 'game' && (
-          <MainGamePage />
-        )}
+          {currentPage === 'game' && (
+            <MainGamePage />
+          )}
 
-        {/* Debug Navigation */}
-        <div style={{ position: 'fixed', bottom: 10, left: 10, display: 'flex', gap: '5px' }}>
-          <button onClick={() => setCurrentPage('title')}>Title</button>
-          <button onClick={() => setCurrentPage('host')}>Host</button>
-          <button onClick={() => setCurrentPage('lobby')}>Lobby</button>
-          <button onClick={() => setCurrentPage('game')}>Game</button>
+          {/* Debug Navigation */}
+          <div style={{ position: 'fixed', bottom: 10, left: 10, display: 'flex', gap: '5px' }}>
+            <button onClick={() => setCurrentPage('title')}>Title</button>
+            <button onClick={() => setCurrentPage('host')}>Host</button>
+            <button onClick={() => setCurrentPage('lobby')}>Lobby</button>
+            <button onClick={() => setCurrentPage('game')}>Game</button>
+          </div>
         </div>
-      </div>
+      </VoiceChatProvider>
     </GameProvider>
   );
 }
