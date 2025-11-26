@@ -1,0 +1,12 @@
+{
+  "rewrites": [
+    {
+      "source": "/join/:gameCode",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
+    }
+  ]
+}
