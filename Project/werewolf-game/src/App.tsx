@@ -35,7 +35,7 @@ const AppContent: React.FC = () => {
         // Don't auto-navigate if we're still in setup
       }
     }
-  }, [gameStatus, gameCode]);
+  }, [gameStatus, gameCode, currentPage]);
 
   return (
     <VoiceChatProvider>

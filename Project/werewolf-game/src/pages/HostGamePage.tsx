@@ -21,7 +21,7 @@ const HostGamePage: React.FC = () => {
   const [errorMessage, setErrorMessage] = useState<string>('');
   const [isCreating, setIsCreating] = useState<boolean>(false);
 
-  const { gameCode, players, createGame, startGame, isHost } = useGameContext();
+  const { gameCode, players, createGame, startGame } = useGameContext();
 
   // Update custom roles when player count changes
   useEffect(() => {

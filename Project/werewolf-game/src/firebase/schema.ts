@@ -35,6 +35,17 @@ export interface Player {
   };
 }
 
+export interface ChatMessage {
+  id: string;
+  senderId: string;
+  senderName: string;
+  content: string;
+  timestamp: number;
+  type: 'public' | 'whisper';
+  targetId?: string;
+  targetName?: string;
+}
+
 export interface GameState {
   currentPhase: 'lobby' | 'night' | 'day' | 'discussion' | 'voting' | 'results' | 'finished';
   round: number;
@@ -54,6 +65,7 @@ export interface Game {
   settings: GameSettings;
   players: { [playerId: string]: Player };
   gameState: GameState;
+  messages?: { [messageId: string]: ChatMessage };
   createdAt: number;
   voiceSignals?: { [playerId: string]: any };
 }
@@ -64,5 +76,6 @@ export const DB_PATHS = {
   playersInGame: (code: string) => `games/${code}/players`,
   gameState: (code: string) => `games/${code}/gameState`,
   gameSettings: (code: string) => `games/${code}/settings`,
+  messages: (code: string) => `games/${code}/messages`,
   voiceSignals: (code: string) => `games/${code}/voiceSignals`,
 } as const;
