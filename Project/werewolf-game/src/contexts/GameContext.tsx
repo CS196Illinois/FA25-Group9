@@ -44,6 +44,7 @@ interface GameContextType {
   protectPlayer: (targetId: string) => Promise<void>;
   investigatePlayer: (targetId: string) => Promise<void>;
   seerVision: (targetId: string) => Promise<void>;
+  sendMessage: (content: string, type: 'public' | 'whisper', targetId?: string, targetName?: string) => Promise<void>;
   leaveGame: () => Promise<void>;
 }
 
@@ -51,10 +52,10 @@ const GameContext = createContext<GameContextType | null>(null);
 
 const DEFAULT_SETTINGS: GameSettings = {
   totalPlayers: 6,
-  nightDuration: 60,
-  dayDuration: 120,
+  nightDuration: 30,
+  dayDuration: 15,
   discussionDuration: 60,
-  votingDuration: 45,
+  votingDuration: 30,
   usePresetRoles: true,
   customRoles: {}
 };
@@ -151,6 +152,7 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }, 1000);
 
     return () => clearInterval(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [timeLeft, currentPhase, isHost]);
 
   // Create a new game
@@ -262,6 +264,34 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   }, [gameCode, currentUserId]);
 
+  // Send a chat message
+  const sendMessage = useCallback(async (
+    content: string,
+    type: 'public' | 'whisper',
+    targetId?: string,
+    targetName?: string
+  ): Promise<void> => {
+    if (!gameCode || !currentUserId) return;
+
+    const currentPlayer = players.find(p => p.id === currentUserId);
+    if (!currentPlayer) return;
+
+    try {
+      await gameService.sendMessage(
+        gameCode,
+        currentUserId,
+        currentPlayer.name,
+        content,
+        type,
+        targetId,
+        targetName
+      );
+    } catch (error) {
+      console.error('Failed to send message:', error);
+      throw error;
+    }
+  }, [gameCode, currentUserId, players]);
+
   // Leave the game
   const leaveGame = useCallback(async (): Promise<void> => {
     if (!gameCode || !currentUserId) return;
@@ -351,7 +381,7 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
           }
 
           nextPhase = 'results';
-          nextTime = 30;
+          nextTime = 15;
           break;
 
         case 'results':
@@ -395,6 +425,7 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
       protectPlayer,
       investigatePlayer,
       seerVision,
+      sendMessage,
       leaveGame,
     }}>
       {children}

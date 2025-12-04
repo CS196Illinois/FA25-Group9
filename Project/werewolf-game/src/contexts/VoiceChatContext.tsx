@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useCallback, useRef } from 'react';
-import AgoraRTC, { IAgoraRTCClient, IAgoraRTCRemoteUser, IMicrophoneAudioTrack } from 'agora-rtc-sdk-ng';
+import AgoraRTC, { IAgoraRTCClient, IMicrophoneAudioTrack, IAgoraRTCRemoteUser } from 'agora-rtc-sdk-ng';
 
 // Your Agora App ID
 const AGORA_APP_ID = '44d14f031f964b0e8371d5dd2e620c93';
@@ -25,6 +25,11 @@ export const VoiceChatProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   const [error, setError] = useState<string | null>(null);
   const localAudioTrack = useRef<IMicrophoneAudioTrack | null>(null);
 
+  const updateParticipants = useCallback(() => {
+    const remoteUsers = client.remoteUsers.map((user: IAgoraRTCRemoteUser) => user.uid.toString());
+    setParticipants(remoteUsers);
+  }, [client]);
+
   const joinRoom = useCallback(async (channelName: string, userName: string) => {
     if (isJoined) {
       console.log('Already joined a channel');
@@ -46,7 +51,7 @@ export const VoiceChatProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       console.log('Successfully joined voice chat');
 
       // Listen for remote users
-      client.on('user-published', async (user, mediaType) => {
+      client.on('user-published', async (user: IAgoraRTCRemoteUser, mediaType: 'audio' | 'video') => {
         if (mediaType === 'audio') {
           await client.subscribe(user, mediaType);
           user.audioTrack?.play();
@@ -55,17 +60,17 @@ export const VoiceChatProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         }
       });
 
-      client.on('user-unpublished', (user) => {
+      client.on('user-unpublished', (user: IAgoraRTCRemoteUser) => {
         console.log('Remote user unpublished:', user.uid);
         updateParticipants();
       });
 
-      client.on('user-joined', (user) => {
+      client.on('user-joined', (user: IAgoraRTCRemoteUser) => {
         console.log('User joined:', user.uid);
         updateParticipants();
       });
 
-      client.on('user-left', (user) => {
+      client.on('user-left', (user: IAgoraRTCRemoteUser) => {
         console.log('User left:', user.uid);
         updateParticipants();
       });
@@ -75,12 +80,7 @@ export const VoiceChatProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       console.error('Error joining room:', err);
       setError('Failed to join voice chat');
     }
-  }, [client, isJoined]);
-
-  const updateParticipants = useCallback(() => {
-    const remoteUsers = client.remoteUsers.map((user) => user.uid.toString());
-    setParticipants(remoteUsers);
-  }, [client]);
+  }, [client, isJoined, updateParticipants]);
 
   const leaveRoom = useCallback(async () => {
     if (!isJoined) {

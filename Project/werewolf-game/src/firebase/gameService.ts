@@ -1,7 +1,7 @@
 // Firebase game service - handles all game operations
 
 import { database, auth } from './config';
-import { ref, push, set, get, onValue, off, remove, update } from 'firebase/database';
+import { ref, set, get, onValue, off, remove, update } from 'firebase/database';
 import { signInAnonymously } from 'firebase/auth';
 import { Game, Player, GameSettings, GameState } from './schema';
 import { DB_PATHS } from './schema';
@@ -134,7 +134,6 @@ class GameService {
       if (game.players[this.currentUserId!]) {
         console.log('Player already in game, updating info');
         // Update player info but keep existing data
-        const existingPlayer = game.players[this.currentUserId!];
         const playerRef = ref(database, `${DB_PATHS.gameByCode(gameCode)}/players/${this.currentUserId}`);
         await update(playerRef, {
           name: playerName,
@@ -668,7 +667,63 @@ class GameService {
       throw error;
     }
   }
+
+  /**
+   * Send a chat message
+   */
+  async sendMessage(
+    gameCode: string,
+    senderId: string,
+    senderName: string,
+    content: string,
+    type: 'public' | 'whisper',
+    targetId?: string,
+    targetName?: string
+  ): Promise<void> {
+    try {
+      const messageId = `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      const messageRef = ref(database, `${DB_PATHS.messages(gameCode)}/${messageId}`);
+
+      const message = {
+        id: messageId,
+        senderId,
+        senderName,
+        content,
+        timestamp: Date.now(),
+        type,
+        targetId: targetId || null,
+        targetName: targetName || null
+      };
+
+      await set(messageRef, message);
+      console.log(`Message sent by ${senderName}: ${content}`);
+    } catch (error) {
+      console.error('Failed to send message:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Subscribe to messages in real-time
+   */
+  subscribeToMessages(gameCode: string, callback: (messages: any[]) => void): () => void {
+    const messagesRef = ref(database, DB_PATHS.messages(gameCode));
+
+    onValue(messagesRef, (snapshot) => {
+      if (snapshot.exists()) {
+        const messagesObj = snapshot.val();
+        const messagesList = Object.values(messagesObj).sort((a: any, b: any) => a.timestamp - b.timestamp);
+        callback(messagesList);
+      } else {
+        callback([]);
+      }
+    });
+
+    // Return unsubscribe function
+    return () => off(messagesRef);
+  }
 }
 
 // Export singleton instance
-export default new GameService();
+const gameService = new GameService();
+export default gameService;

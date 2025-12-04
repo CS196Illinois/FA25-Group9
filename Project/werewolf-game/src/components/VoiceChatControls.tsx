@@ -16,7 +16,7 @@ const VoiceChatControls: React.FC<VoiceChatControlsProps> = ({
   playerRole = 'villager',
   autoJoin = true
 }) => {
-  const { isJoined, isMuted, participants, joinRoom, leaveRoom, toggleMute, error } = useVoiceChat();
+  const { isJoined, isMuted, participants, joinRoom, toggleMute, error } = useVoiceChat();
 
   useEffect(() => {
     if (autoJoin && !isJoined && playerName && gameCode) {
@@ -26,9 +26,8 @@ const VoiceChatControls: React.FC<VoiceChatControlsProps> = ({
 
     return () => {
       // Don't auto-leave on unmount to allow navigation
-      // User can manually leave with the button
     };
-  }, [autoJoin, isJoined, playerName, gameCode]); // Only run when these change
+  }, [autoJoin, isJoined, playerName, gameCode, joinRoom]);
 
   // Determine if voice should be restricted based on game phase
   const isVoiceRestricted = () => {
@@ -44,6 +43,7 @@ const VoiceChatControls: React.FC<VoiceChatControlsProps> = ({
     if (isJoined && isVoiceRestricted() && !isMuted) {
       toggleMute();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [gamePhase, playerRole, isJoined]);
 
   if (!isJoined) {
@@ -67,26 +67,25 @@ const VoiceChatControls: React.FC<VoiceChatControlsProps> = ({
 
   return (
     <div className="pixel-border" style={{
-      padding: '15px',
+      padding: '8px 12px',
       backgroundColor: '#1a0000',
-      border: '2px solid #8B0000',
-      marginBottom: '15px'
+      border: '2px solid #8B0000'
     }}>
       <div style={{
         display: 'flex',
         justifyContent: 'space-between',
         alignItems: 'center',
-        marginBottom: '10px'
+        marginBottom: '6px'
       }}>
         <h4 className="pixel-title" style={{
           margin: 0,
-          fontSize: '0.9rem',
+          fontSize: '0.75rem',
           color: '#DC143C'
         }}>
           VOICE CHAT
         </h4>
         <div className="pixel-text" style={{
-          fontSize: '0.8rem',
+          fontSize: '0.7rem',
           color: '#888'
         }}>
           {participants.length + 1} connected
@@ -108,102 +107,42 @@ const VoiceChatControls: React.FC<VoiceChatControlsProps> = ({
 
       {isVoiceRestricted() && (
         <div className="pixel-text" style={{
-          padding: '8px',
+          padding: '4px 6px',
           backgroundColor: '#4a0000',
           border: '1px solid #DC143C',
-          marginBottom: '10px',
-          fontSize: '0.9rem',
+          marginBottom: '6px',
+          fontSize: '0.75rem',
           color: '#FFD700',
           textAlign: 'center'
         }}>
           {gamePhase === 'night' && playerRole !== 'werewolf'
-            ? '🔇 Voice disabled during night phase'
+            ? '🔇 Voice disabled during night'
             : '🔇 Voice restricted'}
         </div>
       )}
 
       <div style={{
         display: 'flex',
-        gap: '10px'
+        justifyContent: 'center'
       }}>
         <button
           onClick={toggleMute}
           disabled={isVoiceRestricted()}
           className="pixel-button pixel-text"
           style={{
-            flex: 1,
-            padding: '12px',
+            padding: '6px 12px',
             backgroundColor: isMuted ? '#8B0000' : '#228B22',
             color: 'white',
             border: 'none',
             cursor: isVoiceRestricted() ? 'not-allowed' : 'pointer',
-            fontSize: '1rem',
+            fontSize: '0.85rem',
             opacity: isVoiceRestricted() ? 0.5 : 1
           }}
         >
           {isMuted ? '🔇 Unmute' : '🎤 Mute'}
         </button>
-
-        <button
-          onClick={leaveRoom}
-          className="pixel-button pixel-text"
-          style={{
-            padding: '12px 20px',
-            backgroundColor: '#4a0000',
-            color: '#DC143C',
-            border: '1px solid #8B0000',
-            cursor: 'pointer',
-            fontSize: '0.9rem'
-          }}
-        >
-          Leave Voice
-        </button>
       </div>
 
-      {/* Participants list */}
-      <div style={{
-        marginTop: '12px',
-        maxHeight: '120px',
-        overflowY: 'auto'
-      }}>
-        <div className="pixel-text" style={{
-          fontSize: '0.8rem',
-          color: '#888',
-          marginBottom: '6px'
-        }}>
-          In voice chat:
-        </div>
-        {/* Show local user */}
-        <div className="pixel-text" style={{
-          padding: '6px',
-          fontSize: '0.85rem',
-          color: '#DC143C',
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center'
-        }}>
-          <span>{playerName}</span>
-          <span style={{ color: '#FFD700' }}>(You)</span>
-          {isMuted && <span>🔇</span>}
-        </div>
-        {/* Show remote users */}
-        {participants.map((participantId) => (
-          <div
-            key={participantId}
-            className="pixel-text"
-            style={{
-              padding: '6px',
-              fontSize: '0.85rem',
-              color: '#DC143C',
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center'
-            }}
-          >
-            <span>User {participantId.substring(0, 8)}</span>
-          </div>
-        ))}
-      </div>
     </div>
   );
 };

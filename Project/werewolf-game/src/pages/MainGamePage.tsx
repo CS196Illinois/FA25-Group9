@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useGameContext } from '../contexts/GameContext';
 import { ROLE_DEFINITIONS } from '../firebase/rolesConfig';
 import VoiceChatControls from '../components/VoiceChatControls';
+import gameService from '../firebase/gameService';
 
 const MainGamePage: React.FC = () => {
   const {
@@ -16,17 +17,20 @@ const MainGamePage: React.FC = () => {
     submitVote,
     protectPlayer,
     investigatePlayer,
-    seerVision
+    seerVision,
+    sendMessage: sendMessageToFirebase
   } = useGameContext();
   const [message, setMessage] = useState('');
   type MessageType = 'public' | 'whisper';
   interface ChatMessage {
-    id: number;
+    id: string;
+    senderId: string;
+    senderName: string;
     content: string;
-    timestamp: Date;
+    timestamp: number;
     type: MessageType;
-    to?: string | null;
-    toName?: string | null;
+    targetId?: string | null;
+    targetName?: string | null;
   }
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [messageType, setMessageType] = useState<MessageType>('public');
@@ -55,7 +59,45 @@ const MainGamePage: React.FC = () => {
     localStorage.setItem('werewolf_notes', notes);
   }, [notes]);
 
-  const getTimestamp = (d = new Date()) => {
+  // Subscribe to messages from Firebase
+  useEffect(() => {
+    if (!gameCode) return;
+
+    const unsubscribe = gameService.subscribeToMessages(gameCode, (firebaseMessages: any[]) => {
+      // Filter messages: show public messages to everyone, whispers only to sender and target
+      const filteredMessages = firebaseMessages.filter(msg => {
+        if (msg.type === 'public') return true;
+        if (msg.type === 'whisper') {
+          return msg.senderId === currentUserId || msg.targetId === currentUserId;
+        }
+        return false;
+      });
+      setMessages(filteredMessages);
+    });
+
+    return () => unsubscribe();
+  }, [gameCode, currentUserId]);
+
+  // Handle player leaving when closing tab
+  useEffect(() => {
+    if (!gameCode || !currentUserId) return;
+
+    const handleBeforeUnload = async () => {
+      // Remove player from game when closing tab
+      await gameService.leaveGame(gameCode, currentUserId);
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+      // Also leave game when component unmounts
+      handleBeforeUnload();
+    };
+  }, [gameCode, currentUserId]);
+
+  const getTimestamp = (timestamp: number) => {
+    const d = new Date(timestamp);
     let h = d.getHours();
     const m = d.getMinutes();
     const ampm = h >= 12 ? 'PM' : 'AM';
@@ -225,10 +267,6 @@ const MainGamePage: React.FC = () => {
               </div>
             ))}
           </div>
-
-          <div className="pixel-text" style={{ color: '#888', fontSize: '1rem' }}>
-            Game lasted {round} rounds
-          </div>
         </div>
       </div>
     );
@@ -352,7 +390,7 @@ const MainGamePage: React.FC = () => {
       {gameCode && currentPlayer && (
         <div style={{
           background: 'linear-gradient(to bottom, #1a0000, #000)',
-          padding: '15px 20px',
+          padding: '8px 20px',
           borderBottom: '2px solid #8B0000'
         }}>
           <VoiceChatControls
@@ -476,8 +514,8 @@ const MainGamePage: React.FC = () => {
             padding: '15px',
             marginBottom: '15px'
           }}>
-            {messages.map((msg, index) => (
-              <div key={index} className="pixel-text" style={{
+            {messages.map((msg) => (
+              <div key={msg.id} className="pixel-text" style={{
                 padding: '10px',
                 marginBottom: '8px',
                 backgroundColor: msg.type === 'whisper' ? '#1a3a5a' : '#2a0000',
@@ -485,15 +523,26 @@ const MainGamePage: React.FC = () => {
                 fontSize: '1.1rem',
                 color: '#DC143C'
               }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span>{msg.content}</span>
-                  <span style={{ 
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                  <div style={{ flex: 1 }}>
+                    <strong style={{ color: msg.senderId === currentUserId ? '#FFD700' : '#DC143C' }}>
+                      {msg.senderName}
+                      {msg.senderId === currentUserId && ' (You)'}:
+                    </strong>
+                    {' '}
+                    <span>{msg.content}</span>
+                    {msg.type === 'whisper' && (
+                      <span style={{ fontSize: '0.9rem', color: '#888', fontStyle: 'italic' }}>
+                        {' '}(whisper to {msg.targetName})
+                      </span>
+                    )}
+                  </div>
+                  <span style={{
                     fontSize: '0.9rem',
                     color: '#888',
                     whiteSpace: 'nowrap',
                     marginLeft: '10px'
                   }}>
-                    {msg.type === 'whisper' && `(to ${msg.toName}) `}
                     {getTimestamp(msg.timestamp)}
                   </span>
                 </div>
@@ -565,41 +614,35 @@ const MainGamePage: React.FC = () => {
                 border: '2px solid #8B0000',
                 fontSize: '1.1rem'
               }}
-              onKeyPress={(e) => {
+              onKeyPress={async (e) => {
                 if (e.key === 'Enter' && message.trim()) {
-                  const chatMsg: ChatMessage = {
-                    id: Date.now(),
-                    content: message.trim(),
-                    timestamp: new Date(),
-                    type: messageType,
-                    to: undefined,
-                    toName: undefined
-                  };
-                  if (messageType === 'whisper') {
-                    chatMsg.to = whisperTarget ?? null;
-                    chatMsg.toName = players.find(p => p.id === whisperTarget)?.name ?? null;
-                  }
-                  setMessages(prev => [...prev, chatMsg]);
+                  const targetName = messageType === 'whisper'
+                    ? players.find(p => p.id === whisperTarget)?.name
+                    : undefined;
+
+                  await sendMessageToFirebase(
+                    message.trim(),
+                    messageType,
+                    whisperTarget || undefined,
+                    targetName
+                  );
                   setMessage('');
                 }
               }}
             />
             <button
-              onClick={() => {
+              onClick={async () => {
                 if (message.trim()) {
-                  const chatMsg: ChatMessage = {
-                    id: Date.now(),
-                    content: message.trim(),
-                    timestamp: new Date(),
-                    type: messageType,
-                    to: undefined,
-                    toName: undefined
-                  };
-                  if (messageType === 'whisper') {
-                    chatMsg.to = whisperTarget ?? null;
-                    chatMsg.toName = players.find(p => p.id === whisperTarget)?.name ?? null;
-                  }
-                  setMessages(prev => [...prev, chatMsg]);
+                  const targetName = messageType === 'whisper'
+                    ? players.find(p => p.id === whisperTarget)?.name
+                    : undefined;
+
+                  await sendMessageToFirebase(
+                    message.trim(),
+                    messageType,
+                    whisperTarget || undefined,
+                    targetName
+                  );
                   setMessage('');
                 }
               }}
@@ -632,16 +675,8 @@ const MainGamePage: React.FC = () => {
                   border: 'none',
                   cursor: currentPhase === 'night' ? 'not-allowed' : 'pointer'
                 }}
-                onClick={() => {
-                  const chatMsg: ChatMessage = {
-                    id: Date.now(),
-                    content: emoji,
-                    timestamp: new Date(),
-                    type: 'public',
-                    to: undefined,
-                    toName: undefined
-                  };
-                  setMessages(prev => [...prev, chatMsg]);
+                onClick={async () => {
+                  await sendMessageToFirebase(emoji, 'public');
                 }}
               >
                 {emoji}
@@ -864,7 +899,7 @@ const MainGamePage: React.FC = () => {
       )}
 
       {/* Investigation Results (Detective/Seer) */}
-      {currentPlayer?.lastInvestigation && currentPlayer.lastInvestigation.round === round && currentPhase === 'day' && (
+      {currentPlayer?.lastInvestigation && currentPlayer.lastInvestigation.round === round && (currentPhase === 'day' || currentPhase === 'discussion') && (
         <div style={{
           position: 'fixed',
           top: '20px',
@@ -889,7 +924,7 @@ const MainGamePage: React.FC = () => {
         </div>
       )}
 
-      {currentPlayer?.lastVision && currentPlayer.lastVision.round === round && currentPhase === 'day' && (
+      {currentPlayer?.lastVision && currentPlayer.lastVision.round === round && (currentPhase === 'day' || currentPhase === 'discussion') && (
         <div style={{
           position: 'fixed',
           top: '20px',
