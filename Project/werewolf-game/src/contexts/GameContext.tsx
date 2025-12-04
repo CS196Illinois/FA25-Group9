@@ -52,7 +52,7 @@ const GameContext = createContext<GameContextType | null>(null);
 
 const DEFAULT_SETTINGS: GameSettings = {
   totalPlayers: 6,
-  nightDuration: 30,
+  nightDuration: 45,
   dayDuration: 15,
   discussionDuration: 60,
   votingDuration: 30,
@@ -100,7 +100,14 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       // Update game state
       setCurrentPhase(game.gameState.currentPhase as Phase);
-      setTimeLeft(game.gameState.timeRemaining);
+
+      // Calculate time remaining based on lastUpdate timestamp
+      // This ensures everyone sees the same time regardless of when they joined
+      const now = Date.now();
+      const elapsed = Math.floor((now - game.gameState.lastUpdate) / 1000);
+      const calculatedTimeLeft = Math.max(0, game.gameState.timeRemaining - elapsed);
+      setTimeLeft(calculatedTimeLeft);
+
       setRound(game.gameState.round);
       setGameStatus(game.status);
       setGameStateData({
@@ -135,25 +142,31 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
   }, [gameCode]);
 
-  // Timer countdown
+  // Timer countdown - only host manages the timer
   useEffect(() => {
-    if (timeLeft <= 0 || currentPhase === 'lobby' || currentPhase === 'finished') return;
+    if (!isHost || timeLeft <= 0 || currentPhase === 'lobby' || currentPhase === 'finished') return;
 
-    const timer = setInterval(() => {
+    const timer = setInterval(async () => {
       setTimeLeft((prev) => {
-        if (prev <= 1) {
-          if (isHost) {
-            advancePhase();
-          }
+        const newTime = prev - 1;
+
+        if (newTime <= 0) {
+          advancePhase();
           return 0;
         }
-        return prev - 1;
+
+        // Update Firebase every 5 seconds to keep clients in sync
+        if (newTime % 5 === 0 && gameCode) {
+          gameService.updateGamePhase(gameCode, currentPhase, newTime);
+        }
+
+        return newTime;
       });
     }, 1000);
 
     return () => clearInterval(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [timeLeft, currentPhase, isHost]);
+  }, [timeLeft, currentPhase, isHost, gameCode]);
 
   // Create a new game
   const createGame = useCallback(async (settings: GameSettings, hostName: string): Promise<string> => {
