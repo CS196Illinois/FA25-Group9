@@ -512,11 +512,14 @@ const MainGamePage: React.FC = () => {
           background: 'linear-gradient(to bottom, #1a0000, #000)',
           display: 'flex',
           flexDirection: 'column',
-          padding: '20px'
+          padding: '20px',
+          height: '100%',
+          overflow: 'hidden'
         }}>
           {/* Chat Messages */}
           <div ref={chatContainerRef} className="pixel-border" style={{
             flex: 1,
+            minHeight: 0,
             overflowY: 'auto',
             backgroundColor: '#000',
             padding: '15px',

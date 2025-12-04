@@ -101,12 +101,8 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
       // Update game state
       setCurrentPhase(game.gameState.currentPhase as Phase);
 
-      // Calculate time remaining based on lastUpdate timestamp
-      // This ensures everyone sees the same time regardless of when they joined
-      const now = Date.now();
-      const elapsed = Math.floor((now - game.gameState.lastUpdate) / 1000);
-      const calculatedTimeLeft = Math.max(0, game.gameState.timeRemaining - elapsed);
-      setTimeLeft(calculatedTimeLeft);
+      // Update time from Firebase - host manages countdown and syncs every 5 seconds
+      setTimeLeft(game.gameState.timeRemaining);
 
       setRound(game.gameState.round);
       setGameStatus(game.status);
