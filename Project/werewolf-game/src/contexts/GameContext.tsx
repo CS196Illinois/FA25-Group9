@@ -342,16 +342,21 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
           // Clear protections for next round
           await gameService.clearProtections(gameCode);
 
-          // Check win conditions after night elimination
-          const alivePlayers = players.filter(p => p.isAlive);
-          const alivePlayersObj = playersArrayToObject(alivePlayers);
-          if (haveWerewolvesWon(alivePlayersObj)) {
-            await gameService.endGame(gameCode, 'werewolves');
-            return;
-          }
-          if (haveVillagersWon(alivePlayersObj)) {
-            await gameService.endGame(gameCode, 'villagers');
-            return;
+          // Fetch updated game state to get current alive players after night actions
+          const updatedGameAfterNight = await gameService.getGame(gameCode);
+          if (updatedGameAfterNight) {
+            const updatedPlayersNight = Object.values(updatedGameAfterNight.players);
+            const aliveAfterNight = updatedPlayersNight.filter((p: any) => p.isAlive);
+            const alivePlayersObj = playersArrayToObject(aliveAfterNight as Player[]);
+
+            if (haveWerewolvesWon(alivePlayersObj)) {
+              await gameService.endGame(gameCode, 'werewolves');
+              return;
+            }
+            if (haveVillagersWon(alivePlayersObj)) {
+              await gameService.endGame(gameCode, 'villagers');
+              return;
+            }
           }
 
           nextPhase = 'day';
@@ -377,16 +382,21 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
           // Clear votes for next round
           await gameService.clearVotes(gameCode);
 
-          // Check win conditions after day elimination
-          const aliveAfterVote = players.filter(p => p.isAlive);
-          const aliveAfterVoteObj = playersArrayToObject(aliveAfterVote);
-          if (haveWerewolvesWon(aliveAfterVoteObj)) {
-            await gameService.endGame(gameCode, 'werewolves');
-            return;
-          }
-          if (haveVillagersWon(aliveAfterVoteObj)) {
-            await gameService.endGame(gameCode, 'villagers');
-            return;
+          // Fetch updated game state to get current alive players after elimination
+          const updatedGame = await gameService.getGame(gameCode);
+          if (updatedGame) {
+            const updatedPlayers = Object.values(updatedGame.players);
+            const aliveAfterVote = updatedPlayers.filter((p: any) => p.isAlive);
+            const aliveAfterVoteObj = playersArrayToObject(aliveAfterVote as Player[]);
+
+            if (haveWerewolvesWon(aliveAfterVoteObj)) {
+              await gameService.endGame(gameCode, 'werewolves');
+              return;
+            }
+            if (haveVillagersWon(aliveAfterVoteObj)) {
+              await gameService.endGame(gameCode, 'villagers');
+              return;
+            }
           }
 
           nextPhase = 'results';

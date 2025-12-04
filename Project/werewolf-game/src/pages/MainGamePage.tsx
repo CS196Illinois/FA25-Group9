@@ -795,7 +795,7 @@ const MainGamePage: React.FC = () => {
       </div>
 
       {/* Phase Results Overlay */}
-      {currentPhase === 'day' && gameStateData.eliminatedPlayer && (
+      {currentPhase === 'day' && (gameStateData.eliminatedPlayer || gameStateData.lastNightResult) && (
         <div style={{
           position: 'fixed',
           top: 0,

@@ -465,6 +465,20 @@ class GameService {
   }
 
   /**
+   * Get current game state
+   */
+  async getGame(gameCode: string): Promise<Game | null> {
+    try {
+      const gameRef = ref(database, DB_PATHS.gameByCode(gameCode));
+      const snapshot = await get(gameRef);
+      return snapshot.exists() ? snapshot.val() : null;
+    } catch (error) {
+      console.error('Failed to get game:', error);
+      return null;
+    }
+  }
+
+  /**
    * Process night phase actions - handle werewolf kills and doctor protection
    * Returns the player ID who was eliminated (or null if protected)
    */

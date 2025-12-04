@@ -29,6 +29,14 @@ const VoiceChatControls: React.FC<VoiceChatControlsProps> = ({
     };
   }, [autoJoin, isJoined, playerName, gameCode, joinRoom]);
 
+  // Mute everyone at the start when they first join
+  useEffect(() => {
+    if (isJoined && !isMuted) {
+      toggleMute();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isJoined]);
+
   // Determine if voice should be restricted based on game phase
   const isVoiceRestricted = () => {
     if (gamePhase === 'night') {
