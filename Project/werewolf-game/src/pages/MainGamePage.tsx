@@ -38,6 +38,7 @@ const MainGamePage: React.FC = () => {
   const [notes, setNotes] = useState('');
   const [selectedPlayer, setSelectedPlayer] = useState<string | null>(null);
   const [actionTaken, setActionTaken] = useState(false);
+  const chatContainerRef = React.useRef<HTMLDivElement>(null);
 
   // Get current player
   const currentPlayer = players.find(p => p.id === currentUserId);
@@ -77,6 +78,13 @@ const MainGamePage: React.FC = () => {
 
     return () => unsubscribe();
   }, [gameCode, currentUserId]);
+
+  // Auto-scroll chat to bottom when new messages arrive
+  useEffect(() => {
+    if (chatContainerRef.current) {
+      chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight;
+    }
+  }, [messages]);
 
   // Handle player leaving when closing tab
   useEffect(() => {
@@ -507,7 +515,7 @@ const MainGamePage: React.FC = () => {
           padding: '20px'
         }}>
           {/* Chat Messages */}
-          <div className="pixel-border" style={{
+          <div ref={chatContainerRef} className="pixel-border" style={{
             flex: 1,
             overflowY: 'auto',
             backgroundColor: '#000',

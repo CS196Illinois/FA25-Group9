@@ -67,10 +67,10 @@ const HostGamePage: React.FC = () => {
     try {
       await createGame({
         totalPlayers,
-        nightDuration: 60,
-        dayDuration: 120,
+        nightDuration: 45,
+        dayDuration: 15,
         discussionDuration: 60,
-        votingDuration: 45,
+        votingDuration: 30,
         usePresetRoles,
         customRoles
       }, hostName.trim());
