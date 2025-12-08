@@ -27,7 +27,7 @@ const VoiceChatControls: React.FC<VoiceChatControlsProps> = ({
     return () => {
       // Don't auto-leave on unmount to allow navigation
     };
-  }, [autoJoin, isJoined, playerName, gameCode, joinRoom]);
+  }, [autoJoin, isJoined, playerName, gameCode]); // Only run when these change
 
   // Determine if voice should be restricted based on game phase
   const isVoiceRestricted = () => {

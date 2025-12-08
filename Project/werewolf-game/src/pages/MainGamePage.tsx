@@ -38,6 +38,7 @@ const MainGamePage: React.FC = () => {
   const [notes, setNotes] = useState('');
   const [selectedPlayer, setSelectedPlayer] = useState<string | null>(null);
   const [actionTaken, setActionTaken] = useState(false);
+  const chatContainerRef = React.useRef<HTMLDivElement>(null);
 
   // Get current player
   const currentPlayer = players.find(p => p.id === currentUserId);
@@ -59,45 +60,7 @@ const MainGamePage: React.FC = () => {
     localStorage.setItem('werewolf_notes', notes);
   }, [notes]);
 
-  // Subscribe to messages from Firebase
-  useEffect(() => {
-    if (!gameCode) return;
-
-    const unsubscribe = gameService.subscribeToMessages(gameCode, (firebaseMessages: any[]) => {
-      // Filter messages: show public messages to everyone, whispers only to sender and target
-      const filteredMessages = firebaseMessages.filter(msg => {
-        if (msg.type === 'public') return true;
-        if (msg.type === 'whisper') {
-          return msg.senderId === currentUserId || msg.targetId === currentUserId;
-        }
-        return false;
-      });
-      setMessages(filteredMessages);
-    });
-
-    return () => unsubscribe();
-  }, [gameCode, currentUserId]);
-
-  // Handle player leaving when closing tab
-  useEffect(() => {
-    if (!gameCode || !currentUserId) return;
-
-    const handleBeforeUnload = async () => {
-      // Remove player from game when closing tab
-      await gameService.leaveGame(gameCode, currentUserId);
-    };
-
-    window.addEventListener('beforeunload', handleBeforeUnload);
-
-    return () => {
-      window.removeEventListener('beforeunload', handleBeforeUnload);
-      // Also leave game when component unmounts
-      handleBeforeUnload();
-    };
-  }, [gameCode, currentUserId]);
-
-  const getTimestamp = (timestamp: number) => {
-    const d = new Date(timestamp);
+  const getTimestamp = (d = new Date()) => {
     let h = d.getHours();
     const m = d.getMinutes();
     const ampm = h >= 12 ? 'PM' : 'AM';
@@ -504,11 +467,14 @@ const MainGamePage: React.FC = () => {
           background: 'linear-gradient(to bottom, #1a0000, #000)',
           display: 'flex',
           flexDirection: 'column',
-          padding: '20px'
+          padding: '20px',
+          height: '100%',
+          overflow: 'hidden'
         }}>
           {/* Chat Messages */}
-          <div className="pixel-border" style={{
+          <div ref={chatContainerRef} className="pixel-border" style={{
             flex: 1,
+            minHeight: 0,
             overflowY: 'auto',
             backgroundColor: '#000',
             padding: '15px',
@@ -784,7 +750,7 @@ const MainGamePage: React.FC = () => {
       </div>
 
       {/* Phase Results Overlay */}
-      {currentPhase === 'day' && gameStateData.eliminatedPlayer && (
+      {currentPhase === 'day' && (gameStateData.eliminatedPlayer || gameStateData.lastNightResult) && (
         <div style={{
           position: 'fixed',
           top: 0,

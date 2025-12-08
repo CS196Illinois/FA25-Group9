@@ -52,8 +52,8 @@ const GameContext = createContext<GameContextType | null>(null);
 
 const DEFAULT_SETTINGS: GameSettings = {
   totalPlayers: 6,
-  nightDuration: 30,
-  dayDuration: 15,
+  nightDuration: 60,
+  dayDuration: 120,
   discussionDuration: 60,
   votingDuration: 30,
   usePresetRoles: true,
@@ -100,7 +100,10 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       // Update game state
       setCurrentPhase(game.gameState.currentPhase as Phase);
+
+      // Update time from Firebase - host manages countdown and syncs every 5 seconds
       setTimeLeft(game.gameState.timeRemaining);
+
       setRound(game.gameState.round);
       setGameStatus(game.status);
       setGameStateData({
@@ -135,24 +138,29 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
   }, [gameCode]);
 
-  // Timer countdown
+  // Timer countdown - only host manages the timer
   useEffect(() => {
-    if (timeLeft <= 0 || currentPhase === 'lobby' || currentPhase === 'finished') return;
+    if (!isHost || timeLeft <= 0 || currentPhase === 'lobby' || currentPhase === 'finished') return;
 
-    const timer = setInterval(() => {
+    const timer = setInterval(async () => {
       setTimeLeft((prev) => {
-        if (prev <= 1) {
-          if (isHost) {
-            advancePhase();
-          }
+        const newTime = prev - 1;
+
+        if (newTime <= 0) {
+          advancePhase();
           return 0;
         }
-        return prev - 1;
+
+        // Update Firebase every 5 seconds to keep clients in sync
+        if (newTime % 5 === 0 && gameCode) {
+          gameService.updateGamePhase(gameCode, currentPhase, newTime);
+        }
+
+        return newTime;
       });
     }, 1000);
 
     return () => clearInterval(timer);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [timeLeft, currentPhase, isHost]);
 
   // Create a new game
@@ -333,16 +341,21 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
           // Clear protections for next round
           await gameService.clearProtections(gameCode);
 
-          // Check win conditions after night elimination
-          const alivePlayers = players.filter(p => p.isAlive);
-          const alivePlayersObj = playersArrayToObject(alivePlayers);
-          if (haveWerewolvesWon(alivePlayersObj)) {
-            await gameService.endGame(gameCode, 'werewolves');
-            return;
-          }
-          if (haveVillagersWon(alivePlayersObj)) {
-            await gameService.endGame(gameCode, 'villagers');
-            return;
+          // Fetch updated game state to get current alive players after night actions
+          const updatedGameAfterNight = await gameService.getGame(gameCode);
+          if (updatedGameAfterNight) {
+            const updatedPlayersNight = Object.values(updatedGameAfterNight.players);
+            const aliveAfterNight = updatedPlayersNight.filter((p: any) => p.isAlive);
+            const alivePlayersObj = playersArrayToObject(aliveAfterNight as Player[]);
+
+            if (haveWerewolvesWon(alivePlayersObj)) {
+              await gameService.endGame(gameCode, 'werewolves');
+              return;
+            }
+            if (haveVillagersWon(alivePlayersObj)) {
+              await gameService.endGame(gameCode, 'villagers');
+              return;
+            }
           }
 
           nextPhase = 'day';
@@ -368,16 +381,21 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
           // Clear votes for next round
           await gameService.clearVotes(gameCode);
 
-          // Check win conditions after day elimination
-          const aliveAfterVote = players.filter(p => p.isAlive);
-          const aliveAfterVoteObj = playersArrayToObject(aliveAfterVote);
-          if (haveWerewolvesWon(aliveAfterVoteObj)) {
-            await gameService.endGame(gameCode, 'werewolves');
-            return;
-          }
-          if (haveVillagersWon(aliveAfterVoteObj)) {
-            await gameService.endGame(gameCode, 'villagers');
-            return;
+          // Fetch updated game state to get current alive players after elimination
+          const updatedGame = await gameService.getGame(gameCode);
+          if (updatedGame) {
+            const updatedPlayers = Object.values(updatedGame.players);
+            const aliveAfterVote = updatedPlayers.filter((p: any) => p.isAlive);
+            const aliveAfterVoteObj = playersArrayToObject(aliveAfterVote as Player[]);
+
+            if (haveWerewolvesWon(aliveAfterVoteObj)) {
+              await gameService.endGame(gameCode, 'werewolves');
+              return;
+            }
+            if (haveVillagersWon(aliveAfterVoteObj)) {
+              await gameService.endGame(gameCode, 'villagers');
+              return;
+            }
           }
 
           nextPhase = 'results';

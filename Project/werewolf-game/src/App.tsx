@@ -58,14 +58,6 @@ const AppContent: React.FC = () => {
         {currentPage === 'game' && (
           <MainGamePage />
         )}
-
-        {/* Debug Navigation */}
-        <div style={{ position: 'fixed', bottom: 10, left: 10, display: 'flex', gap: '5px', zIndex: 9999 }}>
-          <button onClick={() => setCurrentPage('title')} style={{ padding: '5px 10px', fontSize: '0.7rem' }}>Title</button>
-          <button onClick={() => setCurrentPage('host')} style={{ padding: '5px 10px', fontSize: '0.7rem' }}>Host</button>
-          <button onClick={() => setCurrentPage('lobby')} style={{ padding: '5px 10px', fontSize: '0.7rem' }}>Lobby</button>
-          <button onClick={() => setCurrentPage('game')} style={{ padding: '5px 10px', fontSize: '0.7rem' }}>Game</button>
-        </div>
       </div>
     </VoiceChatProvider>
   );
